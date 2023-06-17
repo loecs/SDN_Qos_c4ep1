@@ -172,8 +172,8 @@ class Monitor(app_manager.RyuApp):
                 throughput = self.get_throughput(
                     self.port_stats[key][-1][0] + self.port_stats[key][-1][1],
                     pre, period)
-
-                self._save_stats(self.port_throughput, key, throughput, 5)
+                self.port_throughput[key]=throughput
+                #self._save_stats(self.port_throughput, key, throughput, 5)
 
 
     @set_ev_cls(ofp_event.EventOFPPortDescStatsReply, MAIN_DISPATCHER)

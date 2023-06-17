@@ -54,12 +54,7 @@ class Detector(app_manager.RyuApp):
         self.packets_result = {}
         self.loss_result = {}
         self.delay_result = {}
-        if setting.SAVE_SQL:
-            self.db = pymysql.connect(host='192.168.50.133',
-                                      port=3306,
-                                      user='c4bep1',
-                                      password='c4bep1',
-                                      database='c4bep1')
+
         self.measure_thread = hub.spawn(self._detector)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
@@ -101,29 +96,38 @@ class Detector(app_manager.RyuApp):
 
     def save_data(self):
         save_result = {}
+        monitor = lookup_service_brick('monitor')
+        for key, value in self.discover.link_to_port.items():
+            src = key[0]
+            dst = key[1]
+            src_port = value[0]
+            dst_port = value[1]
+            key1 = "%s-%s-%s-%s" % (src, src_port, dst_port, dst)
+            key2 = "%s-%s-%s-%s" % (dst, dst_port, src_port, src)
+            temp_throughput = monitor.port_throughput[(src, src_port)][-1]
 
-        try:
-            monitor = lookup_service_brick('monitor')
-            for key, value in self.discover.link_to_port.items():
-                src = key[0]
-                dst = key[1]
-                src_port = value[0]
-                dst_port = value[1]
-                key = "%s-%s-%s-%s" % (src, src_port, dst_port, dst)
-                if src >= dst:
-                    continue
-                save_result[key] = {'throughput': monitor.port_throughput[(src, src_port)][-1],
-                                    'delay': self.delay_result[key],
-                                    'jitter': self.jitter_result[key], 'loss': self.loss_result[key]}
-            if setting.SAVE_SQL:
-                self.save_sql(save_result)
+            self.discover.link_stat.setdefault((src, dst), {})
+            self.discover.link_stat[(src, dst)] = {'throughput': temp_throughput,
+                                                   'delay': self.delay_result[key1],
+                                                   'jitter': self.jitter_result[key1],
+                                                   'loss': self.loss_result[key1]}
 
+            if src >= dst:
+                continue
+            save_result[key1] = {'throughput': temp_throughput,
+                                 'delay': self.delay_result[key1],
+                                 'jitter': self.jitter_result[key1], 'loss': self.loss_result[key1]}
 
-        except:
-            return
+        if setting.SAVE_SQL:
+            self.save_sql(save_result)
 
     def save_sql(self, save_result):
-        cursor = self.db.cursor()
+        db = pymysql.connect(host='192.168.50.133',
+                             port=3306,
+                             user='c4bep1',
+                             password='c4bep1',
+                             database='c4bep1')
+        cursor = db.cursor()
         for key, value in save_result.items():
             # print(key, value)
             # time = datetime.fromtimestamp(timestamp.timestamp())
@@ -131,12 +135,22 @@ class Detector(app_manager.RyuApp):
                 key, value['throughput'], value['delay'], value['jitter'], value['loss'])
 
             cursor.execute(sql)
-            self.db.commit()
+
+        for key, value in self.discover.link_stat.items():
+            src_dpid = key[0]
+            dst_dpid = key[1]
+
+            sql = "update link set link_throughput=%s,link_delay=%s,link_jitter=%s,link_loss=%s where src_dpid=%s and " \
+                  "dst_dpid=%s" % (
+                      value['throughput'], value['delay'], value['jitter'], value['loss'], src_dpid, dst_dpid)
+            cursor.execute(sql)
+        db.commit()
         cursor.close()
+        db.close()
 
     def get_loss(self):
         temp = 0
-        print(self.packets_result)
+        # print(self.packets_result)
         sw_num = len(get_switch(self, None)) * 0.5
         temp_packets = self.packets_result.copy()
         full_packet = setting.DELAY_DETECTING_PERIOD + 1 - sw_num * setting.DELAY_DETECTING_PERIOD / 10
@@ -155,9 +169,6 @@ class Detector(app_manager.RyuApp):
                 temp = temp_packets[key2]
 
             self.packets_result[key1] = 0
-
-            if src >= dst:
-                continue
 
             if temp >= full_packet:
                 self.loss_result[key1] = 0
@@ -186,7 +197,7 @@ class Detector(app_manager.RyuApp):
             delay = (t1 + t2 - t3 - t4) / 2
             return max(delay, 0)
         except:
-            return float('inf')
+            return 0
 
     def _save_link_delay(self, src=0, dst=0, linkdelay=0):
         try:
@@ -210,13 +221,11 @@ class Detector(app_manager.RyuApp):
                         key1 = "%s-%s-%s-%s" % (
                             src, self.discover.link_to_port[(src, dst)][0], self.discover.link_to_port[(src, dst)][1],
                             dst)
-                        key2 = "%s-%s-%s-%s" % (
-                            dst, self.discover.link_to_port[(src, dst)][1], self.discover.link_to_port[(src, dst)][0],
-                            src)
-                        if key2 not in self.delay_result:
-                            if key1 in self.delay_result:
-                                self.jitter_result[key1] = abs(delay * 1000 - self.delay_result[key1])
-                            self.delay_result[key1] = delay * 1000
+                        if key1 in self.delay_result:
+                            self.jitter_result[key1] = abs(delay * 1000 - self.delay_result[key1])
+                        else:
+                            self.jitter_result[key1] = 0
+                        self.delay_result[key1] = delay * 1000
 
                     self.discover.graph[src][dst]['delay'] = delay
         except:

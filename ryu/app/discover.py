@@ -37,23 +37,21 @@ from ryu.topology import event, switches
 from ryu.topology.api import get_switch, get_link
 import setting
 
-
 CONF = cfg.CONF
 
 
 class Discover(app_manager.RyuApp):
-
     OFP_VERSIONS = [ofproto_v1_3.OFP_VERSION]
 
     def __init__(self, *args, **kwargs):
         super(Discover, self).__init__(*args, **kwargs)
         self.topology_api_app = self
         self.name = "discover"
-        self.link_to_port = {}       # (src_dpid,dst_dpid)->(src_port,dst_port)
-        self.access_table = {}       # {(sw,port) :[host1_ip]}
+        self.link_to_port = {}  # (src_dpid,dst_dpid)->(src_port,dst_port)
+        self.access_table = {}  # {(sw,port) :[host1_ip]}
         self.switch_port_table = {}  # dpip->port_num
-        self.access_ports = {}       # dpid->port_num
-        self.interior_ports = {}     # dpid->port_num
+        self.access_ports = {}  # dpid->port_num
+        self.interior_ports = {}  # dpid->port_num
 
         self.graph = nx.DiGraph()
         self.pre_graph = nx.DiGraph()
@@ -120,7 +118,6 @@ class Discover(app_manager.RyuApp):
 
     def get_links(self):
         return self.link_to_port
-
 
     def get_graph(self, link_list):
         """
@@ -268,7 +265,7 @@ class Discover(app_manager.RyuApp):
 
     def pre_topology(self):
         switch_num = len(list(self.graph.nodes()))
-        #print(self.access_table)
+        # print(self.access_table)
         self.pre_graph = copy.deepcopy(self.graph)
         self.pre_link_to_port = copy.deepcopy(self.link_to_port)
         self.pre_access_table = copy.deepcopy(self.access_table)

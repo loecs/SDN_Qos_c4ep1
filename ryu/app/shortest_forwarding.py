@@ -15,7 +15,9 @@
 # limitations under the License.
 
 # conding=utf-8
+import ast
 import logging
+import math
 import struct
 import networkx as nx
 from operator import attrgetter
@@ -38,6 +40,7 @@ import setting
 import discover
 import monitor
 import detector
+import pymysql
 
 CONF = cfg.CONF
 
@@ -58,8 +61,12 @@ class ShortestForwarding(app_manager.RyuApp):
         self.monitor = kwargs["monitor"]
         self.detector = kwargs["detector"]
         self.datapaths = {}
-        self.host_to_path = {}
         self.weight = self.WEIGHT_MODEL[CONF.weight]
+        self.db = pymysql.connect(host='192.168.50.133',
+                                  port=3306,
+                                  user='c4bep1',
+                                  password='c4bep1',
+                                  database='c4bep1')
 
     def set_weight_mode(self, weight):
 
@@ -94,13 +101,14 @@ class ShortestForwarding(app_manager.RyuApp):
                                 match=match, instructions=inst)
         dp.send_msg(mod)
 
-    def send_flow_mod(self, datapath, flow_info, src_port, dst_port, ip_protocol=None,idle_timeout=15,hard_timeout=60):
+    def send_flow_mod(self, datapath, flow_info, src_port, dst_port, ip_protocol=None, idle_timeout=15,
+                      hard_timeout=60):
         parser = datapath.ofproto_parser
         actions = []
         actions.append(parser.OFPActionOutput(dst_port))
         match = parser.OFPMatch()
         if ip_protocol is None:
-            print(flow_info[1]+'-'+flow_info[2])
+
             match = parser.OFPMatch(
                 in_port=src_port, eth_type=flow_info[0],
                 ipv4_src=flow_info[1], ipv4_dst=flow_info[2])
@@ -212,27 +220,199 @@ class ShortestForwarding(app_manager.RyuApp):
         else:
             self.flood(msg)
 
-    def get_path(self, src, dst, weight):
-        """
-            Get shortest path from network discover module.
-        """
+    def get_path(self, src, dst, ip_tos):
+
         shortest_paths = self.discover.shortest_paths
         graph = self.discover.graph
 
-        if weight == self.WEIGHT_MODEL['hop']:
-            return shortest_paths.get(src).get(dst)[0]
-        elif weight == self.WEIGHT_MODEL['delay']:
-            # If paths existed, return it, else calculate it and save it.
-            try:
-                paths = shortest_paths.get(src).get(dst)
-                return paths[0]
-            except:
-                paths = self.discover.k_shortest_paths(graph, src, dst,
-                                                        weight=weight)
+        # print(shortest_paths.get(src).get(dst))
+        if ip_tos != 0:
+            path = self.paths_qos(src, dst, ip_tos)
+            if path is not None:
+                path = ast.literal_eval(path)
+                return path
+        return shortest_paths.get(src).get(dst)[0]
 
-                shortest_paths.setdefault(src, {})
-                shortest_paths[src].setdefault(dst, paths)
-                return paths[0]
+    def get_bw(self, pairs):
+        cursor = self.db.cursor()
+        bw = {}
+        for link in pairs:
+            src = link[0]
+            dst = link[1]
+
+            cursor.execute("select * from link where src_dpid=%s and dst_dpid=%s", (src, dst))
+            if cursor.fetchone() is None:
+                src, dst = dst, src
+
+            cursor.execute("select link_bandwidth from link where src_dpid=%s and dst_dpid=%s", (src, dst))
+            bw[link] = int(cursor.fetchone()[0])
+        cursor.close()
+        return bw
+
+    def links_qos(self, pairs):
+        link_stat = self.discover.link_stat
+        bw = self.get_bw(pairs)
+        free_bw = []
+        delay = []
+        jitter = []
+        loss = []
+
+        for link in pairs:
+            if link in link_stat:
+                # free_bw.append(bw[link] - (link_stat[link]['throughput'] / 1000000))
+                free_bw.append(100 - (link_stat[link]['throughput'] / 1000000))
+                delay.append(link_stat[link]['delay'])
+                jitter.append(link_stat[link]['jitter'])
+                loss.append(link_stat[link]['loss'])
+        link_qos = {'free_bw': free_bw, 'delay': delay, 'jitter': jitter, 'loss': loss}
+        '''
+        print(pairs)
+        print(free_bw)
+        print(delay)
+        print(jitter)
+        print(loss)
+        '''
+        return link_qos
+
+    def paths_free_bw(self, free_bw):
+        path_free_bw = min(free_bw)
+        return path_free_bw
+
+    def paths_delay(self, delay):
+        path_delay = sum(delay)
+        return path_delay
+
+    def paths_jitter(self, jitter):
+
+        path_jitter = 1
+        for i in jitter:
+            path_jitter = path_jitter * (1 - i)
+        path_jitter = 1 - path_jitter
+        if path_jitter < 0:
+            path_jitter = 999
+        return path_jitter
+
+    def paths_loss(self, loss):
+        path_loss = 1
+        for i in loss:
+            path_loss = path_loss * (1 - i)
+        path_loss = 1 - path_loss
+        if path_loss < 0:
+            path_loss = 100
+        return path_loss
+
+    def bandwidth_utility(self, x, B, A, c):
+        return 100 / (1 + B * math.exp(-A * x + c))
+
+    def delay_utility(self, x, B, y1, y2, c1, c2, b1, b2, b3, delta):
+        if x < c1:
+            return 100 - y1 * x
+        elif c1 <= x <= c2:
+            return b1 * math.tanh(B * (x - b2)) + b3
+        else:
+            return delta - y2 * x
+
+    def jitter_utility(self, x, b1, b2, b3, B):
+        return b1 * math.tanh(B * (x - b2)) + b3
+
+    def loss_utility(self, x, b1, b2, b3, B):
+        return b1 - b2 * math.log(b3 + B * x)
+
+    def paths_qos(self, src, dst, ip_tos):
+        shortest_paths = self.discover.shortest_paths
+        paths = shortest_paths.get(src).get(dst)
+        path_utility = {}
+        print('tos:' + str(ip_tos))
+        for path in paths:
+            pairs = list(zip(path, path[1:]))
+            link_qos = self.links_qos(pairs)
+            if not link_qos['free_bw']:
+                continue
+            path_free_bw = self.paths_free_bw(link_qos['free_bw'])
+            path_delay = self.paths_delay(link_qos['delay'])
+            path_jitter = self.paths_jitter(link_qos['jitter'])
+            path_loss = self.paths_loss(link_qos['loss'])
+
+            # path_qos[str(path)] = {'free_bw': path_free_bw, 'delay': path_delay, 'jitter': path_jitter,'loss': path_loss}
+            qos_bw = None
+            qos_delay = None
+            qos_jitter = None
+            qos_loss = None
+            utility_value = 0
+            if ip_tos == setting.SESSION_TOS:
+                qos_bw = self.bandwidth_utility(path_free_bw, setting.SESSION_BW_MEASURE['B'],
+                                                setting.SESSION_BW_MEASURE['A'], setting.SESSION_BW_MEASURE['c'])
+                qos_delay = self.delay_utility(path_delay, setting.SESSION_DELAY_MEASURE['B'],
+                                               setting.SESSION_DELAY_MEASURE['y1'],
+                                               setting.SESSION_DELAY_MEASURE['y2'], setting.SESSION_DELAY_MEASURE['c1'],
+                                               setting.SESSION_DELAY_MEASURE['c2'], setting.SESSION_DELAY_MEASURE['b1'],
+                                               setting.SESSION_DELAY_MEASURE['b2'], setting.SESSION_DELAY_MEASURE['b3'],
+                                               setting.SESSION_DELAY_MEASURE['delta'])
+                qos_jitter = self.jitter_utility(path_jitter, setting.SESSION_JITTER_MEASURE['b1'],
+                                                 setting.SESSION_JITTER_MEASURE['b2'],
+                                                 setting.SESSION_JITTER_MEASURE['b3'],
+                                                 setting.SESSION_JITTER_MEASURE['B'])
+                qos_loss = self.loss_utility(path_loss, setting.SESSION_LOSS_MEASURE['b1'],
+                                             setting.SESSION_LOSS_MEASURE['b2'],
+                                             setting.SESSION_LOSS_MEASURE['b3'], setting.SESSION_LOSS_MEASURE['B'])
+                utility_value = qos_bw * setting.SESSION_WEIGHT['BW'] + qos_delay * setting.SESSION_WEIGHT[
+                    'DELAY'] + qos_jitter * setting.SESSION_WEIGHT['JITTER'] + qos_loss * setting.SESSION_WEIGHT['LOSS']
+
+            elif ip_tos == setting.STREAMING_TOS:
+                qos_bw = self.bandwidth_utility(path_free_bw, setting.STREAMING_BW_MEASURE['B'],
+                                                setting.STREAMING_BW_MEASURE['A'], setting.STREAMING_BW_MEASURE['c'])
+                qos_delay = self.delay_utility(path_delay, setting.STREAMING_DELAY_MEASURE['B'],
+                                               setting.STREAMING_DELAY_MEASURE['y1'],
+                                               setting.STREAMING_DELAY_MEASURE['y2'],
+                                               setting.STREAMING_DELAY_MEASURE['c1'],
+                                               setting.STREAMING_DELAY_MEASURE['c2'],
+                                               setting.STREAMING_DELAY_MEASURE['b1'],
+                                               setting.STREAMING_DELAY_MEASURE['b2'],
+                                               setting.STREAMING_DELAY_MEASURE['b3'],
+                                               setting.STREAMING_DELAY_MEASURE['delta'])
+                qos_jitter = self.jitter_utility(path_jitter, setting.STREAMING_JITTER_MEASURE['b1'],
+                                                 setting.STREAMING_JITTER_MEASURE['b2'],
+                                                 setting.STREAMING_JITTER_MEASURE['b3'],
+                                                 setting.STREAMING_JITTER_MEASURE['B'])
+                qos_loss = self.loss_utility(path_loss, setting.STREAMING_LOSS_MEASURE['b1'],
+                                             setting.STREAMING_LOSS_MEASURE['b2'],
+                                             setting.STREAMING_LOSS_MEASURE['b3'], setting.STREAMING_LOSS_MEASURE['B'])
+                utility_value = qos_bw * setting.STREAMING_WEIGHT['BW'] + qos_delay * setting.STREAMING_WEIGHT[
+                    'DELAY'] + qos_jitter * setting.STREAMING_WEIGHT['JITTER'] + qos_loss * setting.STREAMING_WEIGHT[
+                                    'LOSS']
+
+
+            elif ip_tos == setting.OPERATE_TOS:
+                qos_bw = self.bandwidth_utility(path_free_bw, setting.OPERATE_BW_MEASURE['B'],
+                                                setting.OPERATE_BW_MEASURE['A'], setting.OPERATE_BW_MEASURE['c'])
+                qos_delay = self.delay_utility(path_delay, setting.OPERATE_DELAY_MEASURE['B'],
+                                               setting.OPERATE_DELAY_MEASURE['y1'],
+                                               setting.OPERATE_DELAY_MEASURE['y2'], setting.OPERATE_DELAY_MEASURE['c1'],
+                                               setting.OPERATE_DELAY_MEASURE['c2'], setting.OPERATE_DELAY_MEASURE['b1'],
+                                               setting.OPERATE_DELAY_MEASURE['b2'], setting.OPERATE_DELAY_MEASURE['b3'],
+                                               setting.OPERATE_DELAY_MEASURE['delta'])
+                qos_loss = self.loss_utility(path_loss, setting.OPERATE_LOSS_MEASURE['b1'],
+                                             setting.OPERATE_LOSS_MEASURE['b2'],
+                                             setting.OPERATE_LOSS_MEASURE['b3'], setting.OPERATE_LOSS_MEASURE['B'])
+                utility_value = qos_bw * setting.OPERATE_WEIGHT['BW'] + qos_delay * setting.OPERATE_WEIGHT[
+                    'DELAY'] + qos_loss * setting.OPERATE_WEIGHT['LOSS']
+            elif ip_tos == setting.DOWNLOAD_TOS:
+                qos_bw = self.bandwidth_utility(path_free_bw, setting.DOWNLOAD_BW_MEASURE['B'],
+                                                setting.DOWNLOAD_BW_MEASURE['A'], setting.DOWNLOAD_BW_MEASURE['c'])
+                qos_loss = self.loss_utility(path_loss, setting.DOWNLOAD_LOSS_MEASURE['b1'],
+                                             setting.DOWNLOAD_LOSS_MEASURE['b2'],
+                                             setting.DOWNLOAD_LOSS_MEASURE['b3'], setting.DOWNLOAD_LOSS_MEASURE['B'])
+                utility_value = qos_bw * setting.DOWNLOAD_WEIGHT['BW'] + qos_loss * setting.DOWNLOAD_WEIGHT['LOSS']
+            else:
+                utility_value = 0
+            path_utility[str(path)] = utility_value
+
+        if not path_utility:
+            return None
+
+        path_utility = sorted(path_utility.items(), key=lambda item: item[1], reverse=True)
+        print(path_utility)
+        return path_utility[0][0]
 
     def get_sw(self, dpid, in_port, src, dst):
         """
@@ -267,7 +447,6 @@ class ShortestForwarding(app_manager.RyuApp):
         first_dp = datapaths[path[0]]
         out_port = first_dp.ofproto.OFPP_LOCAL
         back_info = (flow_info[0], flow_info[2], flow_info[1])
-
         # inter_link
         if len(path) > 2:
             for i in xrange(1, len(path) - 1):
@@ -323,11 +502,11 @@ class ShortestForwarding(app_manager.RyuApp):
             if out_port is None:
                 self.logger.info("Out_port is None in same dp")
                 return
-            self.send_flow_mod(first_dp, flow_info, in_port, out_port)
-            self.send_flow_mod(first_dp, back_info, out_port, in_port)
+            self.send_flow_mod(first_dp, flow_info, in_port, out_port, ip_protocol)
+            self.send_flow_mod(first_dp, back_info, out_port, in_port, ip_protocol)
             self.send_packet_out(first_dp, buffer_id, in_port, out_port, data)
 
-    def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst, ip_protocol=None):
+    def shortest_forwarding(self, msg, eth_type, ip_src, ip_dst, ip_protocol=None, ip_tos=0):
 
         datapath = msg.datapath
         ofproto = datapath.ofproto
@@ -339,10 +518,10 @@ class ShortestForwarding(app_manager.RyuApp):
             src_sw, dst_sw = result[0], result[1]
             if dst_sw:
                 # Path has already calculated, just get it.
-                path = self.get_path(src_sw, dst_sw, weight=self.weight)
+                path = self.get_path(src_sw, dst_sw, ip_tos)
                 self.logger.info("[PATH]%s<-->%s: %s" % (ip_src, ip_dst, path))
-                flow_info = (eth_type, ip_src, ip_dst, in_port)
-                # install flow entries to datapath along side the path.
+                flow_info = (eth_type, ip_src, ip_dst, in_port, ip_tos)
+
                 self.install_flow(self.datapaths,
                                   self.discover.link_to_port,
                                   self.discover.access_table, path,
@@ -376,7 +555,6 @@ class ShortestForwarding(app_manager.RyuApp):
                 self.flood(msg)
                 return
 
-
             ip_protocol = None
             # if ICMP Protocol
             if protocol == in_proto.IPPROTO_ICMP:
@@ -397,4 +575,4 @@ class ShortestForwarding(app_manager.RyuApp):
 
             if len(pkt.get_protocols(ethernet.ethernet)):
                 eth_type = pkt.get_protocols(ethernet.ethernet)[0].ethertype
-                self.shortest_forwarding(msg, eth_type, ip_pkt.src, ip_pkt.dst, ip_protocol)
+                self.shortest_forwarding(msg, eth_type, ip_pkt.src, ip_pkt.dst, ip_protocol, ip_pkt.tos)
