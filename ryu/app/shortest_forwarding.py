@@ -404,7 +404,7 @@ class ShortestForwarding(app_manager.RyuApp):
                                              setting.DOWNLOAD_LOSS_MEASURE['b3'], setting.DOWNLOAD_LOSS_MEASURE['B'])
                 utility_value = qos_bw * setting.DOWNLOAD_WEIGHT['BW'] + qos_loss * setting.DOWNLOAD_WEIGHT['LOSS']
             else:
-                utility_value = 0
+                return None
             path_utility[str(path)] = utility_value
 
         if not path_utility:
