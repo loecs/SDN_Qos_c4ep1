@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+{% load static %}
 <html>
 
 <head>
@@ -9,15 +10,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <!-- 引入Element UI组件库样式和JS文件 -->
-    <link rel="stylesheet" href="../css/element-ui.css">
-    <link rel="stylesheet" href="../css/index.css">
-    <script src="../js/vue.min.js"></script>
-    <script src="../js/element-ui.js"></script>
-
+    <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
+    <script src="{% static 'js/vue.min.js' %}"></script>
+    <script src="{% static 'js/element-ui.js' %}"></script>
     <!-- 引入axios和自定义样式 -->
-    <link href="../css/layui.css" rel="stylesheet">
-    <script src="../js/axios.min.js"></script>
-    <script src="../js/layui.js"></script>
+    <script src="{% static 'js/vis-network.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
 </head>
 
 <body>
@@ -47,10 +48,11 @@
                 <!-- 左侧导航区域（可配合Element UI已有的垂直导航） -->
                 <el-aside width="250px" class="nav" style="margin-top: -4px; margin-left: 0px;">
                     <el-menu default-active="4" class="el-menu-vertical-demo menu" router>
-                        <el-menu-item index="1"><a href="index.html" class="link">首页</a></el-menu-item>
-                        <el-menu-item index="2"><a href="link-info.html" class="link">链路信息</a></el-menu-item>
-                        <el-menu-item index="3"><a href="unusual-traffic.html" class="link">异常流量</a></el-menu-item>
-                        <el-menu-item index="4"><a href="flow-table.html" class="link">流表管理</a></el-menu-item>
+                        <el-menu-item index="1"><a href="{% url 'index' %}" class="link">首页</a></el-menu-item>
+                        <el-menu-item index="2"><a href="{% url 'link-info' %}" class="link">链路信息</a></el-menu-item>
+                        <el-menu-item index="3"><a href="{% url 'unusual-traffic' %}" class="link">异常流量</a></el-menu-item>
+                        <el-menu-item index="4"><a href="{% url 'flow-table' %}" class="link">流表管理</a></el-menu-item>
+                        <el-menu-item index="5"><a href="{% url 'flow-table' %}" class="link">meter表管理</a></el-menu-item>
                         <el-menu-item index="5"><a href="#" class="link">业务分类</a></el-menu-item>
                         <el-menu-item index="6"><a href="#" class="link">QoS策略</a></el-menu-item>
                     </el-menu>
@@ -121,7 +123,7 @@
             el: '#app',
             data() {
                 return {
-                    avatarUrl: "../img/img1.jpg",
+                    avatarUrl: "{% static 'img/img1.jpg' %}",
                     tableData: [], // 表格数据
                     addFormVisible: false, // 添加流表弹窗可见性
                     addForm: { // 添加流表表单数据
@@ -150,7 +152,7 @@
                     let dataToDelete = this.tableData[index];
                     console.log(dataToDelete)
                     // 发起 delete 请求，将数据提交到后台
-                    axios.delete('/your/api/url/', {
+                    axios.delete('{% url 'delete_meter_table' %}', {
                         data: dataToDelete
                     }).then(response => {
                         console.log(response.data);
@@ -179,7 +181,7 @@
                 // 提交添加流量表单
                 submitAddForm() {
                     // 将 addForm 数据提交到后端API
-                    axios.post('/your/api/url/', {
+                    axios.post('{% url 'add_meter_table' %}', {
                         data: this.addForm
                     }).then(response => {
                         console.log(response.data);
@@ -200,21 +202,20 @@
                 },
                 // 获取流表数据
                 getTableData() {
-                    axios.get('../show-data/flow-table-data.json')
+                    axios.get('{% static 'show-data/meter-table-data.json' %}')
                         .then(response => {
                             let dataStr = JSON.stringify(response.data)
                             let data = JSON.parse(dataStr)
                             this.tableData = data.map((item, index) => {
                                 var key = Object.keys(item)[0];
-                                for (var i = 0; i < item[key].length; i++) {
-                                    return {
-                                        dpid: key,
-                                        flags: item[key][i].flags,
-                                        meter_id: item[key][i].meter_id,
-                                        type: item[key][i].type,
-                                        rate: item[key][i].rate,
-                                    }
+                                console.log(item)
+                                return {
+                                    dpid: item[key],
+                                    meter_id: item.meter_id,
+                                    flow_count: item.flow_count,
+                                    duration_sec: item.duration_sec,
                                 }
+
                             })
                         }).catch(error => {
                             console.log(error)

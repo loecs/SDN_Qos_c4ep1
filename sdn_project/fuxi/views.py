@@ -125,7 +125,50 @@ def flow_table(request):
     return render(request,'flow-table.html')
 
 def meter_table(request):
-
+    # 调用rest api获取交换机id
+    dpid_list = []
+    link_status = list(link.objects.all().values())
+    link_list = []
+    for link_status_item in link_status:
+        link_list.append([link_status_item['src_dpid'], link_status_item['src_port'], link_status_item['dst_dpid'], link_status_item['dst_port']])
+    # print(link_list)
+    for i in link_list:
+        # 如果交换机id不在dpid_list中，则添加，如果在则不添加
+        if i[0] not in dpid_list:
+            dpid_list.append(i[0])
+        if i[2] not in dpid_list:
+            dpid_list.append(i[2])
+    # print(dpid_list)
+    # 调用rest api获取meter表信息
+    meter_table_list =[]
+    for dpid in dpid_list:
+        url = "http://cloud.loecs.com:7070/stats/meter/" + str(dpid)
+        response = requests.get(url)
+        if response.status_code == 200:
+            # 将response.text转换为json格式,并添加到meter_table_list中
+            # print(response.text)
+            # temp = json.loads(response.text)['dpid']
+            # if temp == None:
+            #     continue
+            meter_table_list.append(json.loads(response.text))  # 字典格式存储
+    # print(meter_table_list)
+    switch_dpid = []
+    for item in meter_table_list:
+        for key in item:
+            value = item[key]
+            temp = {}
+            if value:
+                temp['dpid'] = key
+                temp['meter_id'] = value[0]['meter_id']
+                temp['flow_count'] = value[0]['flow_count']
+                temp['duration_sec']= value[0]['duration_sec']
+                switch_dpid.append(temp)
+            else:
+                continue
+    # print(switch_dpid)
+    # 将switch_dpid转成json格式写入json文件中
+    with open('fuxi/static/show-data/meter-table-data.json', 'w') as f:
+        f.write(json.dumps(switch_dpid))
     return render(request,'meter-table.html')
 
 def delete_flow_table(request):
@@ -168,26 +211,43 @@ def add_flow_table(request):
         return HttpResponse('ok')
     return HttpResponse('fail')
 
-def add_meter_table_data(request):
+def add_meter_table(request):
     # 获取提交要添加的数据
-    data = request.body.decode('utf-8')
+    data = json.loads(request.body.decode('utf-8'))
     # 发送API请求
+    # print(data)
+    temp = data['data']
+    data = {
+        "dpid": temp['dpid'],
+        "flags": [temp['flags']],
+        "meter_id": temp['meter_id'],
+        "bands": [
+            {
+                "type": temp['type'],
+                "rate": temp['rate'],
+            }
+        ]
+    }
+    data=json.dumps(data)
+    url = 'http://cloud.loecs.com:7070/stats/meterentry/add'
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        return HttpResponse('ok')
+    return HttpResponse('fail')
 
-    # url = 'http://cloud.loecs.com:7070/stats/meterentry/add'
-    # response = requests.post(url, data=data)
-    # if response.status_code == 200:
-    #     print('添加流表成功')
-    return HttpResponse('添加成功')
-
-def delete_meter_table_data(request):
-    # 获取提交要删除的数据
+def delete_meter_table(request):
     data = request.body.decode('utf-8')
-    # 发送API请求
-    # url = 'http://cloud.loecs.com:7070/stats/meterentry/delete'
-    # response = requests.post(url, data=data)
-    # if response.status_code == 200:
-    #     print('删除流表成功')
-    return HttpResponse('删除成功')
+    data = json.loads(data)
+    data = {
+        "dpid": data['dpid'],
+        "meter_id": data['meter_id']
+    }
+    data = json.dumps(data)
+    url = 'http://cloud.loecs.com:7070/stats/meterentry/delete'
+    response = requests.post(url, data=data)
+    if response.status_code == 200:
+        return HttpResponse('ok')
+    return HttpResponse('fail')
 
 # 将meter表应用到流表
 def meter_in_flow(request):
