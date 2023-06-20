@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>SDN</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- 引入Element UI组件库样式和JS文件 -->
+    <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
+    <script src="{% static 'js/vue.min.js' %}"></script>
+    <script src="{% static 'js/element-ui.js' %}"></script>
+    <!-- 引入axios和自定义样式 -->
+    <script src="{% static 'js/vis-network.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+
+</head>
+
+<body>
+    <div id="app">
+        <el-container>
+            <!-- 头部区域 -->
+            <el-header class="header">
+                <el-row justify="space-between">
+                    <el-col :span="12">
+                        <div class="header-title">SDN管理系统</div>
+                    </el-col>
+                    <el-col :span="12" align="right">
+                        <el-dropdown trigger="hover">
+                            <span class="avatar-wrapper">
+                                <el-image :src="avatarUrl" class="avatar"></el-image>
+                            </span>
+                            <el-dropdown-menu slot="dropdown">
+                                <el-dropdown-item @click="logout">
+                                    <el-icon name="el-icon-switch-button"></el-icon>
+                                    退出
+                                </el-dropdown-item>
+                            </el-dropdown-menu>
+                        </el-dropdown>
+                        <span class="header-text"></span>
+                    </el-col>
+                </el-row>
+            </el-header>
+
+            <el-container>
+                <!-- 左侧导航区域 -->
+                <el-aside width="250px" class="nav">
+                    <el-menu default-active="1" class="el-menu-vertical-demo menu" router>
+                        <el-menu-item index="1"><a href="{% url 'index' %}" class="link">首页</a></el-menu-item>
+                        <el-menu-item index="2"><a href="{% url 'link-info' %}" class="link">链路信息</a></el-menu-item>
+                        <el-menu-item index="3"><a href="{% url 'unusual-traffic' %}" class="link">异常流量</a></el-menu-item>
+                        <el-menu-item index="4"><a href="{% url 'flow-table' %}" class="link">流表管理</a></el-menu-item>
+                        <el-menu-item index="5"><a href="#" class="link">业务分类</a></el-menu-item>
+                        <el-menu-item index="6"><a href="#" class="link">QoS策略</a></el-menu-item>
+                    </el-menu>
+                </el-aside>
+
+                <!-- 内容主体区域 -->
+                {% block main %}
+                <el-main>
+                    <el-row>
+                        <el-col :span="12">
+                            <div class="chart topo-chart" ref="topo" id="topo"></div><h4 style="text-align: center;font-weight: normal;">拓扑图</h4>
+                        </el-col>
+                        <el-col :span="12">
+                            <div class="chart line-chart" ref="line" id="line"></div><h4 style="text-align: center;font-weight: normal;">时间-吞吐量</h4>
+                        </el-col>
+                    </el-row>
+                    <el-row>
+                        <el-col :span="12">
+                            <div class="chart bar-chart" ref="bar" id="bar"></div><h4 style="text-align: center;font-weight: normal;">ovs交换机-吞吐量</h4>
+                        </el-col>
+                        <el-col :span="12">
+                            <div class="chart pie-chart" ref="pie" id="pie"></div><h4 style="text-align: center;font-weight: normal;">业务流量</h4>
+                        </el-col>
+                    </el-row>
+                </el-main>
+                {% endblock %}
+
+            </el-container>
+
+            <!-- 底部固定区域 -->
+
+        </el-container>
+
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data() {
+                return {
+                    avatarUrl: "{% static 'img/img1.jpg' %}",
+                };
+            },
+            methods: {
+                logout() {
+                    // 执行退出操作，比如清除本地存储的登录信息等
+                    window.location.href = "login.html";
+                },
+            },
+            mounted() {
+                // 初始化vis.js
+                axios.get('{% static 'show-data/graph.json' %}').then(res => {
+
+                    const data = res.data;
+
+                    const nodes = data.nodes.map(node => {
+                        return {
+                            id: node.id,
+                            label: node.label,
+                            group: node.group
+                        }
+                    })
+
+                    const edges = data.edges.map(edge => {
+                        return {
+                            from: edge.from,
+                            to: edge.to
+                        }
+                    })
+
+                    const container = document.getElementById('topo')
+                    const options = {
+                        nodes: {
+                            color: '#E6A23C',
+                            shape: 'dot',
+                            size: 10,
+                            font: {
+                                size: 12,
+                                color: 'black'
+                            }
+                        },
+                        edges: {
+                            color: '#67C23A',
+                            width: 3,
+                            font: {
+                                size: 10,
+                                color: 'black'
+                            }
+                        }
+                    }
+                    const network = new vis.Network(container, { nodes, edges }, options)
+
+                })
+                    .catch(error => console.log(error))
+
+                // 初始化echarts图表
+                var lineChart = echarts.init(document.getElementById('line'));
+                var barChart = echarts.init(document.getElementById('bar'));
+                var pieChart = echarts.init(document.getElementById('pie'));
+
+                // 绘制折线图
+                var lineOption = {
+                    xAxis: {
+                        type: 'category',
+                        data: ['9-11', '11-13', '13-15', '15-17', '17-19', '19-21', '21-23']
+                    },
+                    yAxis: {
+                        type: 'value'
+                    },
+                    series: [{
+                        data: [820, 932, 901, 934, 1290, 1330, 1320],
+                        type: 'line'
+                    }]
+                };
+                lineChart.setOption(lineOption);
+
+                // 绘制柱状图
+                var barOption = {
+                    xAxis: {
+                        type: 'category',
+                        data: ['ovs1', 'ovs2', 'ovs3', 'ovs4', 'ovs5', 'ovs6', 'ovs7']
+                    },
+                    yAxis: {
+                        type: 'value'
+                    },
+                    series: [{
+                        data: [120, 200, 150, 80, 70, 110, 130],
+                        type: 'bar'
+                    }]
+                };
+                barChart.setOption(barOption);
+
+                // 绘制饼图
+                var pieOption = {
+                    series: [
+                        {
+                            type: 'pie',
+                            radius: '50%',
+                            data: [
+                                { value: 335, name: '会话流量' },
+                                { value: 310, name: '流媒体流量' },
+                                { value: 234, name: '其它流量' },
+                                { value: 135, name: '下载流量' },
+                                { value: 1548, name: '交互流量' }
+                            ]
+                        }
+                    ]
+                };
+                pieChart.setOption(pieOption);
+            }
+        });
+    </script>
+</body>
+
+</html>

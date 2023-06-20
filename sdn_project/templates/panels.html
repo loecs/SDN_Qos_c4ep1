@@ -1,0 +1,109 @@
+{% extends 'index.html' %}
+
+{% load static %}
+
+{% block style_css %}
+<link rel="stylesheet" href="{% static 'assets/css/panel.css' %}">
+<style>
+.table {
+    flex: 1;
+    background-color: #f2f2f2;
+    padding: 20px;
+    box-sizing: border-box;
+    border-collapse: collapse;
+}
+.table th, .table td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+    font-size: 14px;
+}
+.content {
+    flex: 2;
+    background-color: #ccc;
+    padding: 20px;
+    box-sizing: border-box;
+}
+</style>
+
+{% endblock %}
+
+{% block script_js %}
+    <script src="{% static 'assets/scripts/panel.js' %}"></script>
+    <script src="https://cdn.staticfile.org/jquery/3.6.0/jquery.min.js"></script>
+	<script src="https://cdn.staticfile.org/layui/2.5.6/layui.min.js"></script>
+	<script>
+		$(function() {
+			var index = 1;
+
+    function handleAddTableBtnClick() {
+        // 添加一个弹出，里面是一个表单，用户输入信息后，点击确定，将表单信息添加到表格中
+    }
+
+    function handleDeleteRowBtnClick() {
+        $(this).parents('tr').remove();
+    }
+
+    $(document).on('click', '.add-table-btn', handleAddTableBtnClick);
+    $(document).on('click', '.delete-row-btn', handleDeleteRowBtnClick);
+});
+	</script>
+{% endblock %}
+
+{% block left-sidebar-a-class %}
+<li><a href={% url 'index' %} class=""><i class="lnr lnr-home"></i> <span>主页</span></a></li>
+    <li><a href={% url 'elements' %} class=""><i class="lnr lnr-code"></i> <span>链路信息</span></a></li>
+    <li><a href={% url 'unusual-traffic' %} class=""><i class="lnr lnr-home"></i> <span>异常流量</span></a></li>
+    <li><a href={% url 'tables' %} class=""><i class="lnr lnr-dice"></i> <span>流表管理</span></a></li>
+    <li><a href={% url 'panels' %} class="active"><i class="lnr lnr-cog"></i> <span>业务分类</span></a></li>
+    <li><a href={% url 'notifications' %} class=""><i class="lnr lnr-alarm"></i> <span>QoS路由</span></a></li>
+{% endblock %}
+{% block main-content %}
+<div class="main-content">
+	<div class="container-fluid">
+        <div class="container">
+            <div class="table">
+			 <button class="btn btn-primary btn-sm add-table-btn">添加表格</button>
+			 <table class="table table-striped">
+				<thead>
+					<tr>
+						<th>dpid</th>
+						<th>meter_id</th>
+						<th>flags</th>
+                        <th>bands</th>
+						<th>操作</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>内容1</td>
+						<td>内容2</td>
+						<td>内容3</td>
+                        <td>内容4</td>
+						<td><a href="javascript:;" class="layui-btn layui-btn-danger layui-btn-xs delete-row-btn">删除</a></td>
+					</tr>
+					<tr>
+						<td>内容1</td>
+						<td>内容2</td>
+						<td>内容3</td>
+                        <td>内容4</td>
+						<td><a href="javascript:;" class="layui-btn layui-btn-danger layui-btn-xs delete-row-btn">删除</a></td>
+					</tr>
+					<tr>
+						<td>内容1</td>
+						<td>内容2</td>
+						<td>内容3</td>
+                        <td>内容4</td>
+						<td><a href="javascript:;" class="layui-btn layui-btn-danger layui-btn-xs delete-row-btn">删除</a></td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+		<div class="content">
+			<p>这是右边的内容区域，你可以在这里添加任何想要展示的内容。</p>
+		</div>
+	</div>
+	</div>
+</div>
+{% endblock %}
+<!-- END MAIN CONTENT -->

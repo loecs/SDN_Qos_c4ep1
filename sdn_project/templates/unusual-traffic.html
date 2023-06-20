@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>SDN</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- 引入Element UI组件库样式和JS文件 -->
+    <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
+    <script src="{% static 'js/vue.min.js' %}"></script>
+    <script src="{% static 'js/element-ui.js' %}"></script>
+    <!-- 引入axios和自定义样式 -->
+    <script src="{% static 'js/vis-network.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+
+    <style>
+        /* 修改框架样式 */
+        .topo-chart {
+            height: 720px;
+        }
+
+        .table-wrapper {
+            height: 720px;
+            overflow: auto;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div id="app">
+        <el-container>
+            <!-- 头部区域 -->
+            <el-header class="header" >
+                <el-row justify="space-between">
+                    <el-col :span="12">
+                        <div class="header-title">SDN管理系统</div>
+                    </el-col>
+                    <el-col :span="12" align="right">
+                        <el-dropdown trigger="hover">
+                            <span class="avatar-wrapper">
+                                <el-image :src="avatarUrl" class="avatar"></el-image>
+                            </span>
+                            <el-dropdown-menu slot="dropdown">
+                                <el-dropdown-item @click="logout">退出</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </el-dropdown>
+                        <span class="header-text"></span>
+                    </el-col>
+                </el-row>
+            </el-header>
+
+            <el-container>
+                <!-- 左侧导航区域 -->
+                <el-aside width="250px" class="nav">
+                    <el-menu default-active="3" class="el-menu-vertical-demo menu" router>
+                        <el-menu-item index="1"><a href="{% url 'index' %}" class="link">首页</a></el-menu-item>
+                        <el-menu-item index="2"><a href="{% url 'link-info' %}" class="link">链路信息</a></el-menu-item>
+                        <el-menu-item index="3"><a href="{% url 'unusual-traffic' %}" class="link">异常流量</a></el-menu-item>
+                        <el-menu-item index="4"><a href="{% url 'flow-table' %}" class="link">流表管理</a></el-menu-item>
+                        <el-menu-item index="5"><a href="#" class="link">业务分类</a></el-menu-item>
+                        <el-menu-item index="6"><a href="#" class="link">QoS策略</a></el-menu-item>
+                    </el-menu>
+                </el-aside>
+                <el-main>
+                    <el-row>
+                        <el-col :span="12">
+                            <div class="chart topo-chart" ref="topo" id="topo"></div>
+                        </el-col>
+                        <el-col :span="12">
+                            <div class="table-wrapper">
+                                <el-table :data="currentPageTableData" border>
+                                    <el-table-column prop="id" label="序号" width="120"></el-table-column>
+                                    <el-table-column prop="intrusion_time" label="攻击时间" width="220"></el-table-column>
+                                    <el-table-column prop="paths" label="路径" width="160"></el-table-column>
+                                    <el-table-column prop="victim_ip" label="受害IP" width="160"></el-table-column>
+                                </el-table>
+                                <div class="pagination">
+                                    <el-pagination @current-change="handleCurrentChange" :page-sizes="[14, 20, 30, 40]"
+                                        layout="total, sizes, prev, pager, next, jumper" :total="tableData.length"
+                                        background></el-pagination>
+                                </div>
+                            </div>               
+                        </el-col>
+                    </el-row>
+                </el-main>
+            </el-container>
+
+
+        </el-container>
+
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data() {
+                return {
+                    avatarUrl: "{% static 'img/img1.jpg' %}",
+                    tableData: [],
+                    // 修改部分：添加currentPage和pageSize属性
+                    currentPage: 1,
+                    pageSize: 14,
+                }
+            },
+            mounted() {
+                // 初始化vis.js
+                axios.get('{% static 'show-data/graph.json' %}').then(res => {
+
+                    const data = res.data;
+
+                    const nodes = data.nodes.map(node => {
+                        return {
+                            id: node.id,
+                            label: node.label,
+                            group: node.group
+                        }
+                    })
+
+                    const edges = data.edges.map(edge => {
+                        return {
+                            from: edge.from,
+                            to: edge.to
+                        }
+                    })
+
+                    const container = document.getElementById('topo')
+                    const options = {}
+                    const network = new vis.Network(container, { nodes, edges }, options)
+
+                })
+                    .catch(error => console.log(error))
+                axios.get('{% static 'show-data/unusual-traffic-data.json' %}').then(response => {
+                let dataStr = JSON.stringify(response.data)
+                let data = JSON.parse(dataStr)
+                this.tableData = data.data
+                }).catch(error => {
+                    console.log(error)
+                })
+            },
+            computed: {
+                // 计算当前页显示的数据
+                currentPageTableData() {
+                    const start = (this.currentPage - 1) * this.pageSize;
+                    const end = start + this.pageSize;
+                    return this.tableData.slice(start, end);
+                },
+            },
+            methods: {
+                // 处理页码变化
+                handleCurrentChange(val) {
+                    this.currentPage = val;
+                },
+                logout() {
+                    // 执行退出操作，比如清除本地存储的登录信息等
+                    window.location.href = "login.html";
+                },
+            },
+        });
+    </script>
+</body>
+
+</html>

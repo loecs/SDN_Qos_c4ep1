@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>网络拓扑图</title>
+  <script src="{% static 'assets/scripts/echarts.min.js' %}"></script>
+</head>
+
+<body>
+  <canvas id="myCanvas"></canvas>   <!--添加canvas标签-->
+  <script>
+  var canvas = document.getElementById('myCanvas');
+  var context = canvas.getContext('2d');
+  //canvas的设置
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  context.strokeStyle = "#CCCCCC";
+  context.lineWidth = 1;
+  context.font='16px Arial';
+  </script>
+```<script>
+  var topologyData = JSON.parse('{{topologyData|safe}}');
+  var canvas = document.getElementById('myCanvas');
+  var context = canvas.getContext('2d');
+  //canvas的设置
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  context.strokeStyle = "#CCCCCC";
+  context.lineWidth = 1;
+  context.font='16px Arial';
+
+  // 获取所有交换机的数据
+  var allSwitches = topologyData.links.map(function(item) {
+      return {
+          switch_dpid: item.src_dpid,
+      };
+  });
+
+  // 创建一个空对象来存储交换机数据，确保每个交换机只出现一次
+  var switches = {};
+
+  allSwitches.forEach(function(item) {
+      if (!switches[item.switch_dpid]) {
+          switches[item.switch_dpid] = item;
+      }
+  });
+
+  topologyData.host_switch.forEach(function (item) {
+    if (!switches[item.switch_dpid]) {
+      switches[item.switch_dpid] = item;
+    }
+  });
+
+  // 将对象转换为数组
+  var switchArray = Object.values(switches);
+
+  var nodeLocations = {};
+
+  topologyData.host_switch.forEach(function (item) {
+    nodeLocations['host-' + item.id] = {x: item.x * canvas.width, y: item.y * canvas.height};
+  });
+
+  switchArray.forEach(function (item, index) {
+    nodeLocations['switch-' + item.switch_dpid] = {
+      x: index % 2 ? 0.1 * canvas.width : 0.9 * canvas.width,
+      y: (1 + Math.floor(index / 2)) * (1 / (1 + Math.floor(switchArray.length / 2)))  * canvas.height};
+  });
+
+  var nodeArray = topologyData.host_switch.map(function (item) {
+    return {
+      id: 'host-' + item.id,
+      name: item.host_ip,
+      symbol: 'circle',
+      symbolSize: 35,
+      itemStyle: {
+        normal: {
+          color: '#7FFFD4'
+        }
+      },
+      ip: item.host_ip,
+      mac: item.host_mac,
+      category: 0,
+      x: item.x * canvas.width,
+      y: item.y * canvas.height,
+    };
+  }).concat(switchArray.map(function (item) {
+    return {
+      id: 'switch-' + item.switch_dpid,
+      name: 'ovs ' + item.switch_dpid,
+      symbol: 'rect',
+      symbolSize: 60,
+      itemStyle: {
+        normal: {
+          color: '#DEB887'
+        }
+      },
+      category: 1,
+      x: nodeLocations[item.switch_dpid].x,
+      y: nodeLocations[item.switch_dpid].y,
+    };
+  }));
+
+  var linkArray = topologyData.host_switch.map(function (item) {
+    return {
+      id: 'link-' + item.id,
+      source: 'host-' + item.id,  // 修改 source 字段为主机节点 id
+      target: 'switch-' + item.switch_dpid,
+      lineStyle: {
+        normal: {
+          color: '#448AFF',
+          width: 3
+        }
+      },
+      src_port: item.switch_port, // 修改 src_port 字段为主机的端口
+      dst_port: item.switch_port, // 修改 dst_port 字段为交换机的端口
+      link_bandwidth: 0, // 初始化link_bandwidth
+      category: 3, // 修改 category 为 3，表示主机与交换机之间的连线
+    };
+  }).concat(topologyData.links.map(function (item) {
+    return {
+      id: 'link-' + item.id,
+      source: 'switch-' + item.src_dpid,
+      target: 'switch-' + item.dst_dpid,
+      lineStyle: {
+        normal: {
+          color: '#448AFF',
+          width: 3
+        }
+      },
+      src_port: item.src_port,
+      dst_port: item.dst_port,
+      link_bandwidth: item.link_bandwidth,
+      category: 2,
+    };
+  })).concat(switchArray.slice(1, switches.length).map(function (item) {
+      return {
+          id: 'link-' + item.switch_dpid,
+          source: 'switch-' + item.switch_dpid,
+          target: switchArray[0].id,
+          lineStyle: {
+              normal: {
+                  color: '#FFA07A',
+                  width: 3
+              }
+          },
+          category: 4,
+      };
+  }));
+
+  function draw() {
+    nodeArray.forEach(function (node) {
+      context.fillStyle = node.itemStyle.normal.color;
+      if (node.symbol === 'circle') {
+        drawCircle(node);
+      } else {
+        drawRect(node);
+      }
+      context.stroke();
+      context.fillText(node.name, node.x + 10, node.y + 45);
+    });
+
+    linkArray.forEach(function (link) {
+      context.beginPath();
+      if (link.lineStyle.normal.color) {
+        context.strokeStyle = link.lineStyle.normal.color;
+      } else {
+        context.strokeStyle ='#448AFF';
+      }
+      context.lineWidth = link.lineStyle.normal.width;
+      var startNode = nodeArray.find(function (node) { return node.id === link.source; });
+      var endNode = nodeArray.find(function (node) { return node.id === link.target; });
+      if (startNode && endNode) {
+        context.moveTo(startNode.x + startNode.symbolSize / 2, startNode.y + startNode.symbolSize / 2);
+        context.lineTo(endNode.x + endNode.symbolSize / 2, endNode.y + endNode.symbolSize / 2);
+        context.stroke();
+        if (link.category === 2) {
+          context.fillText(link.src_port, startNode.x + 5, startNode.y - 10);
+          context.fillText(link.dst_port, endNode.x + 5, endNode.y - 10);
+        }
+      }
+    });
+  }
+
+  function drawCircle(node) {
+    context.beginPath();
+    context.arc(node.x + node.symbolSize / 2, node.y + node.symbolSize / 2, node.symbolSize / 2, 0, 2 * Math.PI);
+  }
+
+  function drawRect(node) {
+    context.beginPath();
+    context.rect(node.x, node.y, node.symbolSize, node.symbolSize);
+  }
+
+  draw();
+
+  </script>
+
+</body>
+</html>

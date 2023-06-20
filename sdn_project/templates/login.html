@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <el-row>
+        <el-col :span="12">
+            <div class="chart topo-chart" ref="topo" id="topo"></div>
+        </el-col>
+        <el-col :span="12">
+            <div class="table-wrapper">
+                <el-table :data="currentPageTableData" border>
+                    <el-table-column prop="id" label="序号" width="120"></el-table-column>
+                    <el-table-column prop="name" label="名称" width="160"></el-table-column>
+                    <el-table-column prop="amount1" label="数量1" width="160"></el-table-column>
+                    <el-table-column prop="amount2" label="数量2" width="160"></el-table-column>
+                    <el-table-column prop="amount3" label="数量3" width="160"></el-table-column>
+                </el-table>
+                <div class="pagination">
+                    <el-pagination @current-change="handleCurrentChange" :page-sizes="[14, 20, 30, 40]"
+                        layout="total, sizes, prev, pager, next, jumper" :total="tableData.length"
+                        background></el-pagination>
+                </div>
+            </div>
+
+        </el-col>
+    </el-row>
+</body>
+</html>
