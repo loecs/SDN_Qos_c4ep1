@@ -26,14 +26,14 @@ def index(request):
     link_list = []
     for link_status_item in link_status:
         link_list.append([link_status_item['src_dpid'], link_status_item['src_port'], link_status_item['dst_dpid'], link_status_item['dst_port']])
-    #print(link_list)
+    # print(link_list)
 
     # 从数据库中获取主机与交换机之间的连接信息，将主机ip、主机mac、交换机id、交换机端口存储在host_switch_list中
     host_switch_status = list(host_switch.objects.all().values())
     host_switch_list = []
     for host_switch_status_item in host_switch_status:
         host_switch_list.append([host_switch_status_item['host_ip'], host_switch_status_item['host_mac'], host_switch_status_item['switch_dpid'], host_switch_status_item['switch_port']])
-    #print(host_switch_list)
+    # print(host_switch_list)
 
     # 先为交换机创建nodes节点和edges边，然后转成json格式
     nodes = []
@@ -45,8 +45,9 @@ def index(request):
         if link_item[2] not in nodes:
             nodes.append(link_item[2])
         edges.append({'from': link_item[0], 'to': link_item[2]})
-    for id in range(1, len(nodes) + 1):
-        nodes[id - 1] = {'id': id, 'label': 'ovs' + str(nodes[id - 1])}
+    nodes = [{'id': id, 'label': 'ovs'+str(id)} for id in nodes]
+    # print(nodes)
+    # print(edges)
     # 为主机创建nodes节点，判断主机是否已经在nodes中，如果不在则添加，如果在则不添加，并记录主机与交换机之间的连接关系
     id = len(nodes)+1
     for host_switch_item in host_switch_list:
@@ -55,9 +56,10 @@ def index(request):
         id += 1
     # 将nodes和edges放在一个字典中，转成json格式，写入json文件中
     graph = {'nodes': nodes, 'edges': edges}
-    print(graph)
+    # print(graph)
     with open('fuxi/static/show-data/graph.json', 'w') as f:
         f.write(json.dumps(graph))
+    # add_meter_table_data(request)
     return render(request,'index.html')
 
 def link_info(request):
@@ -122,6 +124,10 @@ def flow_table(request):
         f.write(json.dumps(flow_table_list))
     return render(request,'flow-table.html')
 
+def meter_table(request):
+
+    return render(request,'meter-table.html')
+
 def delete_flow_table(request):
     data = request.body.decode('utf-8')
     if data == '':
@@ -166,20 +172,21 @@ def add_meter_table_data(request):
     # 获取提交要添加的数据
     data = request.body.decode('utf-8')
     # 发送API请求
-    url = 'http://cloud.loecs.com:7070/stats/meterentry/add'
-    response = requests.post(url, data=data)
-    if response.status_code == 200:
-        print('添加流表成功')
+
+    # url = 'http://cloud.loecs.com:7070/stats/meterentry/add'
+    # response = requests.post(url, data=data)
+    # if response.status_code == 200:
+    #     print('添加流表成功')
     return HttpResponse('添加成功')
 
 def delete_meter_table_data(request):
     # 获取提交要删除的数据
     data = request.body.decode('utf-8')
     # 发送API请求
-    url = 'http://cloud.loecs.com:7070/stats/meterentry/delete'
-    response = requests.post(url, data=data)
-    if response.status_code == 200:
-        print('删除流表成功')
+    # url = 'http://cloud.loecs.com:7070/stats/meterentry/delete'
+    # response = requests.post(url, data=data)
+    # if response.status_code == 200:
+    #     print('删除流表成功')
     return HttpResponse('删除成功')
 
 # 将meter表应用到流表

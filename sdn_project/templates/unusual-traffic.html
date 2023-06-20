@@ -9,7 +9,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
-    <!-- 引入Element UI组件库样式和JS文件 -->
+     <!-- 引入Element UI组件库样式和JS文件 -->
     <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
     <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
     <script src="{% static 'js/vue.min.js' %}"></script>
@@ -38,7 +38,7 @@
     <div id="app">
         <el-container>
             <!-- 头部区域 -->
-            <el-header class="header" >
+            <el-header class="header">
                 <el-row justify="space-between">
                     <el-col :span="12">
                         <div class="header-title">SDN管理系统</div>
@@ -76,9 +76,9 @@
                         </el-col>
                         <el-col :span="12">
                             <div class="table-wrapper">
-                                <el-table :data="currentPageTableData" border>
+                                <el-table :data="currentPageTableData" border @row-click="handleRowClick">
                                     <el-table-column prop="id" label="序号" width="120"></el-table-column>
-                                    <el-table-column prop="intrusion_time" label="攻击时间" width="220"></el-table-column>
+                                    <el-table-column prop="intrusion_time" label="攻击时间" width="160"></el-table-column>
                                     <el-table-column prop="paths" label="路径" width="160"></el-table-column>
                                     <el-table-column prop="victim_ip" label="受害IP" width="160"></el-table-column>
                                 </el-table>
@@ -87,7 +87,7 @@
                                         layout="total, sizes, prev, pager, next, jumper" :total="tableData.length"
                                         background></el-pagination>
                                 </div>
-                            </div>               
+                            </div>
                         </el-col>
                     </el-row>
                 </el-main>
@@ -108,15 +108,18 @@
                     // 修改部分：添加currentPage和pageSize属性
                     currentPage: 1,
                     pageSize: 14,
+                    edges: null,
+                    nodes: null,
                 }
             },
             mounted() {
+                this.network = null;
                 // 初始化vis.js
                 axios.get('{% static 'show-data/graph.json' %}').then(res => {
 
                     const data = res.data;
 
-                    const nodes = data.nodes.map(node => {
+                    this.nodes = data.nodes.map(node => {
                         return {
                             id: node.id,
                             label: node.label,
@@ -124,7 +127,7 @@
                         }
                     })
 
-                    const edges = data.edges.map(edge => {
+                    this.edges = data.edges.map(edge => {
                         return {
                             from: edge.from,
                             to: edge.to
@@ -133,18 +136,19 @@
 
                     const container = document.getElementById('topo')
                     const options = {}
-                    const network = new vis.Network(container, { nodes, edges }, options)
+                    this.network = new vis.Network(container, { nodes: this.nodes, edges: this.edges }, options)
 
                 })
                     .catch(error => console.log(error))
                 axios.get('{% static 'show-data/unusual-traffic-data.json' %}').then(response => {
-                let dataStr = JSON.stringify(response.data)
-                let data = JSON.parse(dataStr)
-                this.tableData = data.data
+                    let dataStr = JSON.stringify(response.data)
+                    let data = JSON.parse(dataStr)
+                    this.tableData = data.data
                 }).catch(error => {
                     console.log(error)
                 })
             },
+
             computed: {
                 // 计算当前页显示的数据
                 currentPageTableData() {
@@ -161,6 +165,20 @@
                 logout() {
                     // 执行退出操作，比如清除本地存储的登录信息等
                     window.location.href = "login.html";
+                },
+                // 处理行点击事件，将对应的边标红
+                handleRowClick(row) {
+                    paths = row.paths.split(',')
+                    nodes = this.nodes
+                    edges = this.edges
+                    for (let i = 0; i < paths.length - 1; i++) {
+                        for (let j = 0; j < edges.length; j++) {
+                            if ((edges[j].from == paths[i] && edges[j].to == paths[i + 1]) || (edges[j].from == paths[i + 1] && edges[j].to == paths[i])) {
+                                edges[j].color = 'red'
+                            }
+                        }
+                    }
+                    this.network.setData({ nodes: nodes, edges: edges })
                 },
             },
         });
