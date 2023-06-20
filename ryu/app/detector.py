@@ -54,7 +54,6 @@ class Detector(app_manager.RyuApp):
         self.packets_result = {}
         self.loss_result = {}
         self.delay_result = {}
-
         self.measure_thread = hub.spawn(self._detector)
 
     @set_ev_cls(ofp_event.EventOFPStateChange,
@@ -118,8 +117,9 @@ class Detector(app_manager.RyuApp):
                                  'delay': self.delay_result[key1],
                                  'jitter': self.jitter_result[key1], 'loss': self.loss_result[key1]}
 
-        if setting.SAVE_SQL:
-            self.save_sql(save_result)
+        if save_result is not None:
+            if setting.SAVE_SQL:
+                self.save_sql(save_result)
 
     def save_sql(self, save_result):
         db = pymysql.connect(host='192.168.50.133',
@@ -128,11 +128,13 @@ class Detector(app_manager.RyuApp):
                              password='c4bep1',
                              database='c4bep1')
         cursor = db.cursor()
-        for key, value in save_result.items():
+        sorted_keys = sorted(save_result.keys(), key=lambda x: tuple(map(int, x.split('-')[:2])))
+
+        for key in sorted_keys:
             # print(key, value)
             # time = datetime.fromtimestamp(timestamp.timestamp())
             sql = "insert into link_stat(link_id,throughput,delay,jitter,loss) values('%s',%s,%s,%s,%s)" % (
-                key, value['throughput'], value['delay'], value['jitter'], value['loss'])
+                key, save_result[key]['throughput'], save_result[key]['delay'], save_result[key]['jitter'], save_result[key]['loss'])
 
             cursor.execute(sql)
 
@@ -144,6 +146,7 @@ class Detector(app_manager.RyuApp):
                   "dst_dpid=%s" % (
                       value['throughput'], value['delay'], value['jitter'], value['loss'], src_dpid, dst_dpid)
             cursor.execute(sql)
+
         db.commit()
         cursor.close()
         db.close()
@@ -162,6 +165,7 @@ class Detector(app_manager.RyuApp):
             key1 = "%s-%s-%s-%s" % (src, src_port, dst_port, dst)
             key2 = "%s-%s-%s-%s" % (dst, dst_port, src_port, src)
             if key1 not in temp_packets or key2 not in temp_packets:
+                self.loss_result[key1] = 0
                 continue
             if temp_packets[key1] <= temp_packets[key2]:
                 temp = temp_packets[key1]
