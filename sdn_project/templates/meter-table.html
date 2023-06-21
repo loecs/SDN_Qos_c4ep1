@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+{% load static %}
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>SDN</title>
+    <meta name="renderer" content="webkit">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- 引入Element UI组件库样式和JS文件 -->
+    <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
+    <script src="{% static 'js/vue.min.js' %}"></script>
+    <script src="{% static 'js/element-ui.js' %}"></script>
+    <!-- 引入axios和自定义样式 -->
+    <script src="{% static 'js/vis-network.min.js' %}"></script>
+    <script src="{% static 'js/axios.min.js' %}"></script>
+    <script src="{% static 'js/echarts.min.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'css/index.css' %}">
+</head>
+
+<body>
+    <div id="app">
+        <el-container>
+            <!-- 头部区域（可配合Element UI已有的水平导航） -->
+            <el-header class="header" style="margin: 4px;">
+                <el-row justify="space-between">
+                    <el-col :span="12">
+                        <div class="header-title">SDN管理系统</div>
+                    </el-col>
+                    <el-col :span="12" align="right">
+                        <el-dropdown trigger="hover">
+                            <span class="avatar-wrapper">
+                                <el-image :src="avatarUrl" class="avatar"></el-image>
+                            </span>
+                            <el-dropdown-menu slot="dropdown">
+                                <el-dropdown-item @click="logout">退出</el-dropdown-item>
+                            </el-dropdown-menu>
+                        </el-dropdown>
+                        <span class="header-text"></span>
+                    </el-col>
+                </el-row>
+            </el-header>
+
+            <el-container>
+                <!-- 左侧导航区域（可配合Element UI已有的垂直导航） -->
+                <el-aside width="250px" class="nav">
+                    <el-menu default-active="2" class="el-menu-vertical-demo menu" router>
+                        <el-menu-item index="1"><a href="{% url 'index' %}" class="link">首页</a></el-menu-item>
+                        <el-submenu index="2">
+                          <template slot="title">网络拓扑管理</template>
+                          <el-menu-item index="2-1"><a href="{% url 'link-info' %}" class="link">链路历史数据</a></el-menu-item>
+                          <el-menu-item index="2-2"><a href="{% url 'endpoint-list' %}" class="link">终端列表</a></el-menu-item>
+                        </el-submenu>
+                        <el-menu-item index="3"><a href="{% url 'unusual-traffic' %}" class="link">异常流量</a></el-menu-item>
+                        <el-menu-item index="4"><a href="{% url 'flow-table' %}" class="link">流表管理</a></el-menu-item>
+                        <el-menu-item index="5"><a href="{% url 'meter-table' %}" class="link">meter表管理</a></el-menu-item>
+                        <el-menu-item index="6"><a href="#" class="link">QoS策略</a></el-menu-item>
+                      </el-menu>
+
+                </el-aside>
+
+                <!-- 内容主体区域 -->
+                <el-main>
+                    <!-- 头部 -->
+
+                    <!-- 数据表格 -->
+                    <el-row>
+                        <el-col :span="24">
+                            <el-card class="table-card">
+                                <el-table :data="tableData" border style="width: 100%">
+                                    <el-table-column prop="dpid" label="dpid" width="180"></el-table-column>
+                                    <el-table-column prop="flow_count" label="绑定数量" width="220"></el-table-column>
+                                    <el-table-column prop="duration_sec" label="存活时间" width="180"></el-table-column>
+                                    <el-table-column prop="meter_id" label="meter_id" width="180"></el-table-column>
+                                    <el-table-column label="操作">
+                                        <template slot-scope="scope">
+                                            <el-button size="mini"
+                                                @click="handleDelete(scope.$index, scope.row)">删除</el-button>
+                                        </template>
+                                    </el-table-column>
+                                </el-table>
+                            </el-card>
+                        </el-col>
+                    </el-row>
+                    <el-footer class="footer">
+                        <el-button type="primary" @click="addTableRow()">添加流表</el-button>
+
+                        <el-dialog title="添加流量" :visible.sync="addFormVisible" width="50%" center>
+                            <el-form :model="addForm" class="add-form">
+                                <el-form-item label="dpid">
+                                    <el-input v-model="addForm.dpid"></el-input>
+                                </el-form-item>
+                                <el-form-item label="flags">
+                                    <el-input v-model="addForm.flags"></el-input>
+                                </el-form-item>
+                                <el-form-item label="meter_id">
+                                    <el-input v-model="addForm.meter_id"></el-input>
+                                </el-form-item>
+                                <el-form-item label="type">
+                                    <el-input v-model="addForm.type"></el-input>
+                                </el-form-item>
+                                <el-form-item label="rate">
+                                    <el-input v-model="addForm.rate"></el-input>
+                                </el-form-item>
+                                <el-form-item label="port">
+                                    <el-input v-model="addForm.port"></el-input>
+                                </el-form-item>
+                            </el-form>
+
+                            <span class="add-form-footer">
+                                <el-button type="primary" @click="submitAddForm">确认</el-button>
+                                <el-button @click="cancelAddForm">取消</el-button>
+                            </span>
+                        </el-dialog>
+                    </el-footer>
+                </el-main>
+            </el-container>
+
+            <!-- 底部固定区域 -->
+
+        </el-container>
+
+    </div>
+
+    <script>
+        new Vue({
+            el: '#app',
+            data() {
+                return {
+                    avatarUrl: "{% static 'img/img1.png' %}",
+                    tableData: [], // 表格数据
+                    addFormVisible: false, // 添加流表弹窗可见性
+                    addForm: { // 添加流表表单数据
+                        dpid: '',
+                        flags: '',
+                        meter_id: '',
+                        type: '',
+                        rate: ''
+                    }
+                }
+            },
+            methods: {
+                logout() {
+                    // 执行退出操作，比如清除本地存储的登录信息等
+                    window.location.href = "login.html";
+                },
+
+                // 编辑操作
+                handleEdit(index, row) {
+                    // 需要编辑的行数据
+                    console.log(index, row);
+                },
+                // 删除操作
+                handleDelete(index, row) {
+                    // 获取要删除的行数据
+                    let dataToDelete = this.tableData[index];
+                    console.log(dataToDelete)
+                    // 发起 delete 请求，将数据提交到后台
+                    axios.delete('{% url 'delete_meter_table' %}', {
+                        data: dataToDelete
+                    }).then(response => {
+                        console.log(response.data);
+                        // 成功删除数据后，从表格的数据中删除该行
+                        this.tableData.splice(index, 1);
+                    }).catch(error => {
+                        console.log(error);
+                    });
+                },
+                // 添加流量按钮点击事件
+                addTableRow() {
+                    this.addFormVisible = true;
+                },
+                // 取消添加流量
+                cancelAddForm() {
+                    this.addFormVisible = false;
+                    // 重置表单数据
+                    this.addForm = {
+                        dpid: '',
+                        flags: '',
+                        meter_id: '',
+                        type: '',
+                        rate: ''
+                    };
+                },
+                // 提交添加流量表单
+                submitAddForm() {
+                    // 将 addForm 数据提交到后端API
+                    axios.post('{% url 'add_meter_table' %}', {
+                        data: this.addForm
+                    }).then(response => {
+                        console.log(response.data);
+                        // 成功提交数据后，将数据push到tableData数组中
+                        this.tableData.push(this.addForm);
+                        // 弹窗中的数据提交后清空并关闭弹窗
+                        this.addFormVisible = false;
+                        this.addForm = {
+                            dpid: '',
+                            flags: '',
+                            meter_id: '',
+                            type: '',
+                            rate: '',
+                            port:''
+                        };
+                    }).catch(error => {
+                        console.log(error);
+                    });
+                },
+                // 获取流表数据
+                getTableData() {
+                    axios.get('{% static 'show-data/meter-table-data.json' %}')
+                        .then(response => {
+                            let dataStr = JSON.stringify(response.data)
+                            let data = JSON.parse(dataStr)
+                            this.tableData = data.map((item, index) => {
+                                var key = Object.keys(item)[0];
+                                console.log(item)
+                                return {
+                                    dpid: item[key],
+                                    meter_id: item.meter_id,
+                                    flow_count: item.flow_count,
+                                    duration_sec: item.duration_sec,
+                                }
+
+                            })
+                        }).catch(error => {
+                            console.log(error)
+                        });
+                }
+            },
+            created() {
+                // 获取表格数据
+                this.getTableData();
+            }
+        })
+    </script>
+</body>
+
+</html>

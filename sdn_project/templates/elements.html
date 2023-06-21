@@ -1,0 +1,45 @@
+{% extends "index.html" %}
+
+{% block left-sidebar-a-class %}
+    <li><a href={% url 'index' %} class=""><i class="lnr lnr-home"></i> <span>主页</span></a></li>
+    <li><a href={% url 'elements' %} class="active"><i class="lnr lnr-code"></i> <span>链路信息</span></a></li>
+    <li><a href={% url 'unusual-traffic' %} class=""><i class="lnr lnr-home"></i> <span>异常流量</span></a></li>
+    <li><a href={% url 'tables' %} class=""><i class="lnr lnr-dice"></i> <span>流表管理</span></a></li>
+    <li><a href={% url 'panels' %} class=""><i class="lnr lnr-cog"></i> <span>业务分类</span></a></li>
+    <li><a href={% url 'notifications' %} class=""><i class="lnr lnr-alarm"></i> <span>QoS路由</span></a></li>
+{% endblock %}
+{% block main-content %}
+<div class="main-content">
+	<div class="container-fluid">
+		<div class="row">
+			<table class="layui-table">
+					<thead>
+						<tr>
+							<th>序号</th>
+                            <th>时间</th>
+							<th>链路ID</th>
+							<th>吞吐量</th>
+							<th>时延</th>
+                            <th>抖动</th>
+							<th>丢包率</th>
+
+						</tr>
+					</thead>
+					<tbody>
+                     {% for data in link_status %}
+						<tr>
+                            <td>{{ data.id }}</td>
+                            <td>{{ data.record_time }}</td>
+                            <td>{{ data.link_id }}</td>
+                            <td>{{ data.throughput }}</td>
+                            <td>{{ data.delay }}</td>
+                            <td>{{ data.jitter }}</td>
+                            <td>{{ data.loss }}</td>
+						</tr>
+                     {% endfor %}
+					</tbody>
+				</table>
+		</div>
+	</div>
+</div>
+{% endblock %}

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>网络拓扑图</title>
+  <script src="{% static 'assets/scripts/echarts.min.js' %}"></script>
+</head>
+
+<body>
+  <div id="main" style="width:100%;height:600px;"></div>
+  <script>
+    var topologyData = JSON.parse('{{topologyData|safe}}');
+    var myChart = echarts.init(document.getElementById('main'));
+
+    // 获取所有交换机的数据
+var allSwitches = topologyData.links.map(function(item) {
+    return {
+        switch_dpid: item.src_dpid,
+    };
+});
+
+    // 创建一个空对象来存储交换机数据，确保每个交换机只出现一次
+    var switches = {};
+
+    allSwitches.forEach(function(item) {
+    if (!switches[item.switch_dpid]) {
+        switches[item.switch_dpid] = item;
+    }
+});
+
+    topologyData.host_switch.forEach(function (item) {
+      if (!switches[item.switch_dpid]) {
+        switches[item.switch_dpid] = item;
+      }
+    });
+
+    // 将对象转换为数组
+    var switchArray = Object.values(switches);
+
+    myChart.setOption({
+      title: {
+        text: '网络拓扑图'
+      },
+      tooltip: {
+        formatter: function (params, ticket, callback) {
+          if (params.dataType === 'node') {
+            if (params.data.category === 0) {
+              return 'IP: ' + params.data.ip + '<br>' + 'MAC: ' + params.data.mac;
+            } else if (params.data.category === 1) {
+              return '设备 ID: ' + params.data.id;
+            }
+          } else if (params.dataType === 'edge') {
+            if (params.data.category === 2) {
+              return '链路ID：'+params.data.id+'<br>' +
+                      params.data.source + ' 端口: ' + params.data.src_port  + '<br>' +
+                      params.data.target + ' 端口: ' + params.data.dst_port + '<br>' +
+                     '带宽: ' + params.data.link_bandwidth;
+            } else {
+              return '交换机端口: ' + params.data.dst_port;
+            }
+          }
+        }
+      },
+      series: [{
+        type: 'graph',
+        layout: 'force',
+        force: {
+          repulsion: 1000,
+          edgeLength: 100
+        },
+        data: topologyData.host_switch.map(function (item) {
+          return {
+            id: 'host-' + item.id,
+            name: item.host_ip,
+            symbol: 'circle',
+            symbolSize: 35,
+            itemStyle: {
+              normal: {
+                color: '#7FFFD4'
+              }
+            },
+            ip: item.host_ip,
+            mac: item.host_mac,
+            category: 0,
+            draggable: true,
+          };
+        }).concat(switchArray.map(function (item) {
+          return {
+            id: 'switch-' + item.switch_dpid,
+            name: 'ovs ' + item.switch_dpid,
+            symbol: 'rect',
+            symbolSize: 60,
+            itemStyle: {
+              normal: {
+                color: '#DEB887'
+              }
+            },
+            category: 1,
+            draggable: true,
+          };
+        })),
+        links: topologyData.host_switch.map(function (item) {
+          return {
+            id: 'link-' + item.id,
+            source: 'host-' + item.id,  // 修改 source 字段为主机节点 id
+            target: 'switch-' + item.switch_dpid,
+            lineStyle: {
+              normal: {
+                color: '#448AFF',
+                width: 3
+              }
+            },
+            src_port: item.switch_port, // 修改 src_port 字段为主机的端口
+            dst_port: item.switch_port, // 修改 dst_port 字段为交换机的端口
+            link_bandwidth: 0, // 初始化link_bandwidth
+            category: 3, // 修改 category 为 3，表示主机与交换机之间的连线
+            draggable: true,
+          };
+        }).concat(topologyData.links.map(function (item) {
+          return {
+            id: 'link-' + item.id,
+            source: 'switch-' + item.src_dpid,
+            target: 'switch-' + item.dst_dpid,
+            lineStyle: {
+              normal: {
+                color: '#448AFF',
+                width: 3
+              }
+            },
+            src_port: item.src_port,
+            dst_port: item.dst_port,
+            link_bandwidth: item.link_bandwidth,
+            category: 2,
+            draggable: true,
+          };
+        })).concat(switchArray.map(function(item) {
+            return {
+                id: 'link-' + item.switch_dpid,
+                source: 'switch-' + item.switch_dpid,
+                target: switchArray[0].id, // 连接到第一个交换机
+                lineStyle: {
+                    normal: {
+                        color: '#FFA07A',
+                        width: 3
+                    }
+                },
+                category: 4, // 新增类型，表示交换机与交换机之间的连线
+                draggable: true,
+            };
+        })),
+        categories: [{
+                name: '主机',
+                itemStyle: {
+                    normal: {
+                        color: '#7FFFD4'
+                    }
+                }
+            },
+            {
+                name: 'ovs',
+                itemStyle: {
+                    normal: {
+                        color: '#DEB887'
+                    }
+                }
+            },
+            {
+                name: '链路',
+                itemStyle: {
+                    normal: {
+                        color: '#448AFF'
+                    }
+                }
+            },
+            {
+                name: '主机与交换机之间的连线',
+                itemStyle: {
+                    normal: {
+                        color: '#FFA07A'
+                    }
+                }
+            },
+            {
+                name: '交换机与交换机之间的连线',
+                itemStyle: {
+                    normal: {
+                        color: '#FFA07A'
+                    }
+                }
+            }
+        ],
+        roam: true,
+        //focusNodeAdjacency: true,
+        draggable: true,
+        label: {
+          show: true,
+          position: 'inside',
+        }
+      }]
+    });
+  </script>
+</body>
+
+</html>
