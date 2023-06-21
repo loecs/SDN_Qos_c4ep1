@@ -178,9 +178,7 @@ class Monitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPortDescStatsReply, MAIN_DISPATCHER)
     def port_desc_stats_reply_handler(self, ev):
-        """
-            Save port description info.
-        """
+
         msg = ev.msg
         dpid = msg.datapath.id
         ofproto = msg.datapath.ofproto
@@ -221,9 +219,7 @@ class Monitor(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def _port_status_handler(self, ev):
-        """
-            Handle the port status changed event.
-        """
+
         msg = ev.msg
         reason = msg.reason
         port_no = msg.desc.port_no

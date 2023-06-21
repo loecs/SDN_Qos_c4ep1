@@ -135,9 +135,7 @@ class ShortestForwarding(app_manager.RyuApp):
                       idle_timeout=idle_timeout, hard_timeout=hard_timeout)
 
     def _build_packet_out(self, datapath, buffer_id, src_port, dst_port, data):
-        """
-            Build packet out object.
-        """
+
         actions = []
         if dst_port:
             actions.append(datapath.ofproto_parser.OFPActionOutput(dst_port))
@@ -154,19 +152,14 @@ class ShortestForwarding(app_manager.RyuApp):
         return out
 
     def send_packet_out(self, datapath, buffer_id, src_port, dst_port, data):
-        """
-            Send packet out packet to assigned datapath.
-        """
+
         out = self._build_packet_out(datapath, buffer_id,
                                      src_port, dst_port, data)
         if out:
             datapath.send_msg(out)
 
     def get_port(self, dst_ip, access_table):
-        """
-            Get access port if dst host.
-            access_table: {(sw,port) :(ip, mac)}
-        """
+
         if access_table:
             if isinstance(access_table.values()[0], tuple):
                 for key in access_table.keys():
@@ -183,10 +176,7 @@ class ShortestForwarding(app_manager.RyuApp):
             return None
 
     def flood(self, msg):
-        """
-            Flood ARP packet to the access port
-            which has no record of host.
-        """
+
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -201,10 +191,7 @@ class ShortestForwarding(app_manager.RyuApp):
                     datapath.send_msg(out)
 
     def arp_forwarding(self, msg, src_ip, dst_ip):
-        """ Send ARP packet to the destination host,
-            if the dst host record is existed,
-            else, flow it to the unknow access port.
-        """
+
         datapath = msg.datapath
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
@@ -415,9 +402,7 @@ class ShortestForwarding(app_manager.RyuApp):
         return path_utility[0][0]
 
     def get_sw(self, dpid, in_port, src, dst):
-        """
-            Get pair of source and destination switches.
-        """
+
         src_sw = dpid
         dst_sw = None
 
@@ -436,11 +421,7 @@ class ShortestForwarding(app_manager.RyuApp):
 
     def install_flow(self, datapaths, link_to_port, access_table, path,
                      flow_info, buffer_id, data=None, ip_protocol=None):
-        '''
-            Install flow entires for roundtrip: go and back.
-            @parameter: path=[dpid1, dpid2...]
-                        flow_info=(eth_type, src_ip, dst_ip, in_port)
-        '''
+
         if path is None or len(path) == 0:
             return
         in_port = flow_info[3]
@@ -530,10 +511,7 @@ class ShortestForwarding(app_manager.RyuApp):
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
     def _packet_in_handler(self, ev):
-        '''
-            In packet_in handler, we need to learn access_table by ARP.
-            Therefore, the first packet from UNKOWN host MUST be ARP.
-        '''
+
         msg = ev.msg
         datapath = msg.datapath
         dpid = datapath.id
