@@ -9,7 +9,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <!-- 引入Element UI组件库样式和JS文件 -->
-   <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
+    <link rel="stylesheet" href="{% static 'css/element-ui.css' %}">
     <link rel="stylesheet" href="{% static 'css/vis-network.min.css' %}">
     <script src="{% static 'js/vue.min.js' %}"></script>
     <script src="{% static 'js/element-ui.js' %}"></script>
@@ -57,17 +57,38 @@
                       </el-menu>
 
                 </el-aside>
-                <el-main >
+                <el-main>
                     <div>
                         <el-table :data="filteredTableData" border style="width: 100%"
                             header-row-class-name="header-row-class">
                             <el-table-column prop="id" label="序号" width="120"></el-table-column>
-                            <el-table-column prop="record_time" label="时间" width="220"></el-table-column>
-                            <el-table-column prop="link_id" label="链路ID" width="200"></el-table-column>
-                            <el-table-column prop="throughput" label="吞吐量" width="220"></el-table-column>
+                            <el-table-column prop="record_time" label="时间" width="200"></el-table-column>
+                            <el-table-column prop="link_id" label="链路ID" width="100"></el-table-column>
+                            <el-table-column prop="throughput" label="吞吐量" width="120"></el-table-column>
                             <el-table-column prop="delay" label="时延" width="205"></el-table-column>
                             <el-table-column prop="jitter" label="抖动" width="205"></el-table-column>
                             <el-table-column prop="loss" label="丢包率" width="200"></el-table-column>
+                            <el-table-column prop="bandwidth" label="带宽" width="120"></el-table-column>
+                            <el-table-column label="操作">
+                                <template slot-scope="scope">
+                                    <el-button size="mini" @click="handleModify(scope.row)">修改</el-button>
+                                    <el-dialog :visible.sync="dialogVisible">
+                                        <el-form ref="form" :model="form" label-width="80px">
+                                            <el-form-item label="Link ID">
+                                                <el-input v-model="form.link_id"></el-input>
+                                            </el-form-item>
+                                            <el-form-item label="bandwidth">
+                                                <el-input v-model="form.bandwidth"></el-input>
+                                            </el-form-item>
+                                        </el-form>
+                                        <div slot="footer" class="dialog-footer">
+                                            <el-button @click="dialogVisible = false">取 消</el-button>
+                                            <el-button type="primary" @click="updateTableRow(form)">修 改</el-button>
+                                        </div>
+                                    </el-dialog>
+
+                                </template>
+                            </el-table-column>
                         </el-table>
                         <div style="margin-top: 10px; text-align: right;">
                             <el-pagination layout="prev, pager, next" :page-size="15" :total="tableData.length"
@@ -98,7 +119,8 @@
                         throughput: '',
                         delay: '',
                         jitter: '',
-                        loss: ''
+                        loss: '',
+                        bandwidth: '100'
                     }
                 }
             },
@@ -109,9 +131,12 @@
                 }
             },
             mounted() {
-                axios.get('{% static 'show-data/link-data.json'%}').then(response => {
+                axios.get('{% static 'show-data/link-data.json' %}').then(response => {
                     let dataStr = JSON.stringify(response.data)
                     let data = JSON.parse(dataStr)
+                    data.data.forEach(row => {
+                        row.bandwidth = '100'; // 初始化带宽为100
+                    });
                     this.tableData = data.data
                 }).catch(error => {
                     console.log(error)
@@ -126,18 +151,24 @@
                 handleCurrentChange(page) {
                     this.currentPage = page;
                 },
-                addTableRow() {
-                    const newTableData = {
-                        id: this.tableData.length + 1,
-                        record_time: '2023-06-18 15:00:00',
-                        link_id: this.form.link_id,
-                        throughput: this.form.throughput,
-                        delay: this.form.delay,
-                        jitter: this.form.jitter,
-                        loss: this.form.loss
-                    };
-                    this.tableData.push(newTableData);
+                handleModify(row) {
+                    this.form = Object.assign({}, row); // 将行数据复制到表单对象
+                    this.dialogVisible = true; // 弹出修改表单
+                },
+                updateTableRow(form) {
+                    // 根据行数据的id，找到对应的行数据，并更新它的值
+                    const updatedRow = this.tableData.find(row => row.id === form.id);
+                    Object.assign(updatedRow, form);
+                    /*这里可以添加把修改后的数据发送给后端的代码，使用axios工具可以进行简单的crud操作*/
                     this.dialogVisible = false;
+                    console.log(form.bandwidth);
+                    axios.post('{% url 'modify_bandwidth' %}', {
+                        form
+                    }).then(response => {
+                        console.log(response);
+                    }).catch(error => {
+                        console.log(error);
+                    })
                 }
             }
         });

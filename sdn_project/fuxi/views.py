@@ -82,6 +82,9 @@ def link_info(request):
         f.write(json.dumps(link_json))
     return render(request,'link-info.html')
 
+def modify_bandwidth(request):
+    return HttpResponse('ok')
+
 def endpoint_list(request):
     # 从数据库中获取主机与交换机之间的连接信息，将主机ip、主机mac、交换机id、交换机端口存储在host_switch_list中
     host_switch_status = list(host_switch.objects.all().values())

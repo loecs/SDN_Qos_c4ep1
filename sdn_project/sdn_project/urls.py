@@ -21,6 +21,7 @@ urlpatterns = [
     # path('', fuxi.endpoint_list),
     path('', fuxi.index,name='index'),
     path('link-info/', fuxi.link_info,name='link-info'),
+    path('modify_bandwidth/', fuxi.modify_bandwidth,name='modify_bandwidth'),
     path('endpoint-list/', fuxi.endpoint_list,name='endpoint-list'),
     path('unusual-traffic/', fuxi.unusual_traffic,name='unusual-traffic'),
     path('flow-table/', fuxi.flow_table,name='flow-table'),
