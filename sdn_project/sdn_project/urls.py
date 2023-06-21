@@ -18,15 +18,16 @@ from django.urls import path,re_path
 import fuxi.views as fuxi
 
 urlpatterns = [
-    path('', fuxi.endpoint_list),
-    # path('', fuxi.index,name='index'),
-    # path('link-info/', fuxi.link_info,name='link-info'),
-    # path('unusual-traffic/', fuxi.unusual_traffic,name='unusual-traffic'),
-    # path('flow-table/', fuxi.flow_table,name='flow-table'),
-    # path('delete_flow_table/', fuxi.delete_flow_table,name='delete_flow_table'),
-    # path('add_flow_table/', fuxi.add_flow_table,name='add_flow_table'),
-    # path('meter-table/', fuxi.meter_table,name='meter-table'),
-    # path('delete_meter_table/', fuxi.delete_meter_table,name='delete_meter_table'),
-    # path('add_meter_table/', fuxi.add_meter_table,name='add_meter_table'),
+    # path('', fuxi.endpoint_list),
+    path('', fuxi.index,name='index'),
+    path('link-info/', fuxi.link_info,name='link-info'),
+    path('endpoint-list/', fuxi.endpoint_list,name='endpoint-list'),
+    path('unusual-traffic/', fuxi.unusual_traffic,name='unusual-traffic'),
+    path('flow-table/', fuxi.flow_table,name='flow-table'),
+    path('delete_flow_table/', fuxi.delete_flow_table,name='delete_flow_table'),
+    path('add_flow_table/', fuxi.add_flow_table,name='add_flow_table'),
+    path('meter-table/', fuxi.meter_table,name='meter-table'),
+    path('delete_meter_table/', fuxi.delete_meter_table,name='delete_meter_table'),
+    path('add_meter_table/', fuxi.add_meter_table,name='add_meter_table'),
     # path('admin/', admin.site.urls),
 ]
