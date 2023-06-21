@@ -82,6 +82,18 @@ def link_info(request):
         f.write(json.dumps(link_json))
     return render(request,'link-info.html')
 
+def endpoint_list(request):
+    # 从数据库中获取主机与交换机之间的连接信息，将主机ip、主机mac、交换机id、交换机端口存储在host_switch_list中
+    host_switch_status = list(host_switch.objects.all().values())
+    host_switch_list = []
+    for host_switch_status_item in host_switch_status:
+        temp = {'id':host_switch_status_item['id'],'ip': host_switch_status_item['host_ip'], 'mac': host_switch_status_item['host_mac'], 'switch_dpid': host_switch_status_item['switch_dpid'], 'switch_port': host_switch_status_item['switch_port']}
+        host_switch_list.append(temp)
+    # 将host_switch_list转成json格式写入json文件中
+    with open('fuxi/static/show-data/endpoint-list-data.json', 'w') as f:
+        f.write(json.dumps(host_switch_list))
+    return render(request,'endpoint-list.html')
+
 def unusual_traffic(request):
     # 从数据库中获取异常流量数据
     abnormal_traffic_list = list(abnormal_traffic.objects.all().values())
@@ -248,8 +260,3 @@ def delete_meter_table(request):
     if response.status_code == 200:
         return HttpResponse('ok')
     return HttpResponse('fail')
-
-# 将meter表应用到流表
-def meter_in_flow(request):
-    # 获取meter表id，获取流表action字段,将action字段的type改为METER
-    return HttpResponse('应用成功')
