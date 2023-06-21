@@ -110,7 +110,7 @@ def unusual_traffic(request):
     data['msg'] = ''
     data['count'] = len(abnormal_traffic_list)
     data['data'] = abnormal_traffic_list
-    with open('fuxi/static/show-data/flow-table-data.json', 'w') as f:
+    with open('fuxi/static/show-data/unusual-traffic-data.json', 'w') as f:
         f.write(json.dumps(data))
     return render(request,'unusual-traffic.html')
 
@@ -161,7 +161,7 @@ def meter_table(request):
         response = requests.get(url)
         if response.status_code == 200:
             # 将response.text转换为json格式,并添加到meter_table_list中
-            # print(response.text)
+            print(response.text)
             # temp = json.loads(response.text)['dpid']
             # if temp == None:
             #     continue
@@ -231,6 +231,8 @@ def add_meter_table(request):
     data = json.loads(request.body.decode('utf-8'))
     # 发送API请求
     # print(data)
+    port = data['data']['port']
+    # print(port)
     temp = data['data']
     data = {
         "dpid": temp['dpid'],
@@ -243,10 +245,24 @@ def add_meter_table(request):
             }
         ]
     }
-    data=json.dumps(data)
+    # print(data)
     url = 'http://cloud.loecs.com:7070/stats/meterentry/add'
-    response = requests.post(url, data=data)
+    response = requests.post(url, data=json.dumps(data))
     if response.status_code == 200:
+        # 构造流表数据
+        data = {
+            "dpid": temp['dpid'],
+            "actions": [
+                {
+                    "type": data['meter_id'],
+                    "port": port
+                }
+            ]
+
+        }
+        url = "http://cloud.loecs.com:7070/stats/flowentry/add"
+        requests.post(url, data=json.dumps(data))
+        print(data)
         return HttpResponse('ok')
     return HttpResponse('fail')
 

@@ -19,6 +19,7 @@ import fuxi.views as fuxi
 
 urlpatterns = [
     # path('', fuxi.endpoint_list),
+    # path('', fuxi.login,name='login'),
     path('', fuxi.index,name='index'),
     path('link-info/', fuxi.link_info,name='link-info'),
     path('modify_bandwidth/', fuxi.modify_bandwidth,name='modify_bandwidth'),

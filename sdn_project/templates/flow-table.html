@@ -74,9 +74,10 @@
                                 <el-table :data="tableData" border style="width: 100%">
                                     <el-table-column prop="dpid" label="dpid" width="180"></el-table-column>
                                     <el-table-column prop="actions" label="actions" width="220"></el-table-column>
-                                    <el-table-column prop="priority" label="priority" width="180"></el-table-column>
-                                    <el-table-column prop="flags" label="flags" width="180"></el-table-column>
-                                    <el-table-column prop="table_id" label="table_id" width="180"></el-table-column>
+                                    <el-table-column prop="priority" label="priority" width="160"></el-table-column>
+                                    <el-table-column prop="flags" label="flags" width="160"></el-table-column>
+                                    <el-table-column prop="table_id" label="table_id" width="160"></el-table-column>
+                                    <el-table-column prop="match" label="match" width="200"></el-table-column>
                                     <el-table-column label="操作">
                                         <template slot-scope="scope">
                                             <el-button size="mini"
@@ -184,7 +185,8 @@
                         actions: '',
                         priority: '',
                         flags: '',
-                        table_id: ''
+                        table_id: '',
+                        match:''
                     };
                 },
                 // 提交添加流量表单
@@ -213,20 +215,25 @@
                 getTableData() {
                     axios.get('{% static 'show-data/flow-table-data.json' %}')
                         .then(response => {
-                            let dataStr = JSON.stringify(response.data)
-                            let data = JSON.parse(dataStr)
+                            let dataStr = JSON.stringify(response.data);
+                            let data = JSON.parse(dataStr);
                             this.tableData = data.map((item, index) => {
                                 var key = Object.keys(item)[0];
+                                let result = [];
                                 for (var i = 0; i < item[key].length; i++) {
-                                    return {
+                                    console.log(item[key]);
+                                    console.log(item[key].length);
+                                    result.push({
                                         dpid: key,
                                         actions: item[key][i].actions,
                                         priority: item[key][i].priority,
                                         flags: item[key][i].flags,
                                         table_id: item[key][i].table_id,
-                                    }
+                                        match: JSON.stringify(item[key][i].match)
+                                    });
                                 }
-                            })
+                                return result;
+                            }).flat();
                         }).catch(error => {
                             console.log(error)
                         });

@@ -105,6 +105,9 @@
                                 <el-form-item label="rate">
                                     <el-input v-model="addForm.rate"></el-input>
                                 </el-form-item>
+                                <el-form-item label="port">
+                                    <el-input v-model="addForm.port"></el-input>
+                                </el-form-item>
                             </el-form>
 
                             <span class="add-form-footer">
@@ -198,7 +201,8 @@
                             flags: '',
                             meter_id: '',
                             type: '',
-                            rate: ''
+                            rate: '',
+                            port:''
                         };
                     }).catch(error => {
                         console.log(error);
