@@ -14,9 +14,9 @@
 # limitations under the License.
 
 import logging
-import six
 import struct
 import time
+import json
 from ryu import cfg
 
 from ryu.topology import event
@@ -29,12 +29,10 @@ from ryu.lib import addrconv, hub
 from ryu.lib.mac import DONTCARE_STR
 from ryu.lib.dpid import dpid_to_str, str_to_dpid
 from ryu.lib.port_no import port_no_to_str
-from ryu.lib.packet import packet, ethernet
-from ryu.lib.packet import lldp, ether_types
+from ryu.lib.packet import packet, ethernet, lldp
 from ryu.ofproto.ether import ETH_TYPE_LLDP
-from ryu.ofproto.ether import ETH_TYPE_CFM
-from ryu.ofproto import nx_match
 from ryu.ofproto import ofproto_v1_0
+from ryu.ofproto import nx_match
 from ryu.ofproto import ofproto_v1_2
 from ryu.ofproto import ofproto_v1_3
 from ryu.ofproto import ofproto_v1_4
@@ -86,7 +84,7 @@ class Port(object):
         return {'dpid': dpid_to_str(self.dpid),
                 'port_no': port_no_to_str(self.port_no),
                 'hw_addr': self.hw_addr,
-                'name': self.name.decode('utf-8')}
+                'name': self.name.rstrip('\0')}
 
     # for Switch.del_port()
     def __eq__(self, other):
@@ -160,72 +158,6 @@ class Link(object):
         return 'Link: %s to %s' % (self.src, self.dst)
 
 
-class Host(object):
-    # This is data class passed by EventHostXXX
-    def __init__(self, mac, port):
-        super(Host, self).__init__()
-        self.port = port
-        self.mac = mac
-        self.ipv4 = []
-        self.ipv6 = []
-
-    def to_dict(self):
-        d = {'mac': self.mac,
-             'ipv4': self.ipv4,
-             'ipv6': self.ipv6,
-             'port': self.port.to_dict()}
-        return d
-
-    def __eq__(self, host):
-        return self.mac == host.mac and self.port == host.port
-
-    def __str__(self):
-        msg = 'Host<mac=%s, port=%s,' % (self.mac, str(self.port))
-        msg += ','.join(self.ipv4)
-        msg += ','.join(self.ipv6)
-        msg += '>'
-        return msg
-
-
-class HostState(dict):
-    # mac address -> Host class
-    def __init__(self):
-        super(HostState, self).__init__()
-
-    def add(self, host):
-        mac = host.mac
-        self.setdefault(mac, host)
-
-    def update_ip(self, host, ip_v4=None, ip_v6=None):
-        mac = host.mac
-        host = None
-        if mac in self:
-            host = self[mac]
-
-        if not host:
-            return
-
-        if ip_v4 is not None:
-            if ip_v4 in host.ipv4:
-                host.ipv4.remove(ip_v4)
-            host.ipv4.append(ip_v4)
-
-        if ip_v6 is not None:
-            if ip_v6 in host.ipv6:
-                host.ipv6.remove(ip_v6)
-            host.ipv6.append(ip_v6)
-
-    def get_by_dpid(self, dpid):
-        result = []
-
-        for mac in self:
-            host = self[mac]
-            if host.port.dpid == dpid:
-                result.append(host)
-
-        return result
-
-
 class PortState(dict):
     # dict: int port_no -> OFPPort port
     # OFPPort is defined in ryu.ofproto.ofproto_v1_X_parser
@@ -249,6 +181,7 @@ class PortData(object):
         self.lldp_data = lldp_data
         self.timestamp = None
         self.sent = 0
+        self.delay = 0
 
     def lldp_sent(self):
         self.timestamp = time.time()
@@ -280,8 +213,9 @@ class PortDataState(dict):
 
     def __init__(self):
         super(PortDataState, self).__init__()
-        self._root = root = []  # sentinel node
-        root[:] = [root, root, None]  # [_PREV, _NEXT, _KEY] doubly linked list
+        self._root = root = []          # sentinel node
+        root[:] = [root, root, None]    # [_PREV, _NEXT, _KEY]
+                                        # doubly linked list
         self._map = {}
 
     def _remove_key(self, key):
@@ -355,7 +289,7 @@ class PortDataState(dict):
             curr = curr[self._NEXT]
 
     def clear(self):
-        for node in self._map.values():
+        for node in self._map.itervalues():
             del node[:]
         root = self._root
         root[:] = [root, root, None]
@@ -426,11 +360,19 @@ class LLDPPacket(object):
     PORT_ID_STR = '!I'      # uint32_t
     PORT_ID_SIZE = 4
 
+    DOMAIN_ID_PREFIX = 'domain_id:'
+    DOMAIN_ID_PREFIX_LEN = len(DOMAIN_ID_PREFIX)
+    DOMAIN_ID_FMT = DOMAIN_ID_PREFIX + '%s'
+
+    VPORT_ID_STR = '!I'      # uint32_t
+    VPORT_ID_SIZE = 4
+
     class LLDPUnknownFormat(RyuException):
         message = '%(msg)s'
 
     @staticmethod
-    def lldp_packet(dpid, port_no, dl_addr, ttl):
+    def lldp_packet(dpid, port_no,
+                    dl_addr, ttl, vport_no=ofproto_v1_0.OFPP_NONE):
         pkt = packet.Packet()
 
         dst = lldp.LLDP_MAC_NEAREST_BRIDGE
@@ -441,8 +383,8 @@ class LLDPPacket(object):
 
         tlv_chassis_id = lldp.ChassisID(
             subtype=lldp.ChassisID.SUB_LOCALLY_ASSIGNED,
-            chassis_id=(LLDPPacket.CHASSIS_ID_FMT %
-                        dpid_to_str(dpid)).encode('ascii'))
+            chassis_id=LLDPPacket.CHASSIS_ID_FMT %
+            dpid_to_str(dpid))
 
         tlv_port_id = lldp.PortID(subtype=lldp.PortID.SUB_PORT_COMPONENT,
                                   port_id=struct.pack(
@@ -453,6 +395,7 @@ class LLDPPacket(object):
         tlv_end = lldp.End()
 
         tlvs = (tlv_chassis_id, tlv_port_id, tlv_ttl, tlv_end)
+
         lldp_pkt = lldp.lldp(tlvs)
         pkt.add_protocol(lldp_pkt)
 
@@ -463,10 +406,11 @@ class LLDPPacket(object):
     def lldp_parse(data):
         pkt = packet.Packet(data)
         i = iter(pkt)
-        eth_pkt = six.next(i)
+        eth_pkt = i.next()
         assert type(eth_pkt) == ethernet.ethernet
 
-        lldp_pkt = six.next(i)
+        lldp_pkt = i.next()
+
         if type(lldp_pkt) != lldp.lldp:
             raise LLDPPacket.LLDPUnknownFormat()
 
@@ -474,7 +418,7 @@ class LLDPPacket(object):
         if tlv_chassis_id.subtype != lldp.ChassisID.SUB_LOCALLY_ASSIGNED:
             raise LLDPPacket.LLDPUnknownFormat(
                 msg='unknown chassis id subtype %d' % tlv_chassis_id.subtype)
-        chassis_id = tlv_chassis_id.chassis_id.decode('utf-8')
+        chassis_id = tlv_chassis_id.chassis_id
         if not chassis_id.startswith(LLDPPacket.CHASSIS_ID_PREFIX):
             raise LLDPPacket.LLDPUnknownFormat(
                 msg='unknown chassis id format %s' % chassis_id)
@@ -497,11 +441,9 @@ class Switches(app_manager.RyuApp):
     OFP_VERSIONS = [ofproto_v1_0.OFP_VERSION, ofproto_v1_2.OFP_VERSION,
                     ofproto_v1_3.OFP_VERSION, ofproto_v1_4.OFP_VERSION]
     _EVENTS = [event.EventSwitchEnter, event.EventSwitchLeave,
-               event.EventSwitchReconnected,
                event.EventPortAdd, event.EventPortDelete,
                event.EventPortModify,
-               event.EventLinkAdd, event.EventLinkDelete,
-               event.EventHostAdd]
+               event.EventLinkAdd, event.EventLinkDelete]
 
     DEFAULT_TTL = 120  # unused. ignored.
     LLDP_PACKET_LEN = len(LLDPPacket.lldp_packet(0, 0, DONTCARE_STR, 0))
@@ -520,7 +462,6 @@ class Switches(app_manager.RyuApp):
         self.port_state = {}          # datapath_id => ports
         self.ports = PortDataState()  # Port class -> PortData class
         self.links = LinkState()      # Link class -> timestamp
-        self.hosts = HostState()      # mac address -> Host class list
         self.is_active = True
 
         self.link_discovery = self.CONF.observe_links
@@ -550,14 +491,13 @@ class Switches(app_manager.RyuApp):
 
     def _unregister(self, dp):
         if dp.id in self.dps:
-            if (self.dps[dp.id] == dp):
-                del self.dps[dp.id]
-                del self.port_state[dp.id]
+            del self.dps[dp.id]
+            del self.port_state[dp.id]
 
     def _get_switch(self, dpid):
         if dpid in self.dps:
             switch = Switch(self.dps[dpid])
-            for ofpport in self.port_state[dpid].values():
+            for ofpport in self.port_state[dpid].itervalues():
                 switch.add_port(ofpport)
             return switch
 
@@ -589,13 +529,6 @@ class Switches(app_manager.RyuApp):
             self.send_event_to_observers(event.EventLinkDelete(rev_link))
         self.ports.move_front(dst)
 
-    def _is_edge_port(self, port):
-        for link in self.links:
-            if port == link.src or port == link.dst:
-                return False
-
-        return True
-
     @set_ev_cls(ofp_event.EventOFPStateChange,
                 [MAIN_DISPATCHER, DEAD_DISPATCHER])
     def state_change_handler(self, ev):
@@ -606,19 +539,16 @@ class Switches(app_manager.RyuApp):
         if ev.state == MAIN_DISPATCHER:
             dp_multiple_conns = False
             if dp.id in self.dps:
-                LOG.warning('Multiple connections from %s', dpid_to_str(dp.id))
+                LOG.warning('multiple connections from %s', dpid_to_str(dp.id))
                 dp_multiple_conns = True
-                (self.dps[dp.id]).close()
 
             self._register(dp)
             switch = self._get_switch(dp.id)
             LOG.debug('register %s', switch)
 
+            # Do not send event while dp has multiple connections.
             if not dp_multiple_conns:
                 self.send_event_to_observers(event.EventSwitchEnter(switch))
-            else:
-                evt = event.EventSwitchReconnected(switch)
-                self.send_event_to_observers(evt)
 
             if not self.link_discovery:
                 return
@@ -672,23 +602,19 @@ class Switches(app_manager.RyuApp):
             # dp.id is None when datapath dies before handshake
             if dp.id is None:
                 return
-
             switch = self._get_switch(dp.id)
-            if switch:
-                if switch.dp is dp:
-                    self._unregister(dp)
-                    LOG.debug('unregister %s', switch)
-                    evt = event.EventSwitchLeave(switch)
-                    self.send_event_to_observers(evt)
+            self._unregister(dp)
+            LOG.debug('unregister %s', switch)
+            self.send_event_to_observers(event.EventSwitchLeave(switch))
 
-                    if not self.link_discovery:
-                        return
+            if not self.link_discovery:
+                return
 
-                    for port in switch.ports:
-                        if not port.is_reserved():
-                            self.ports.del_port(port)
-                            self._link_down(port)
-                    self.lldp_event.set()
+            for port in switch.ports:
+                if not port.is_reserved():
+                    self.ports.del_port(port)
+                    self._link_down(port)
+            self.lldp_event.set()
 
     @set_ev_cls(ofp_event.EventOFPPortStatus, MAIN_DISPATCHER)
     def port_status_handler(self, ev):
@@ -765,15 +691,16 @@ class Switches(app_manager.RyuApp):
                       dp.ofproto.OFP_VERSION)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def lldp_packet_in_handler(self, ev):
+    def packet_in_handler(self, ev):
+        recv_timestamp = time.time()
         if not self.link_discovery:
             return
 
         msg = ev.msg
         try:
             src_dpid, src_port_no = LLDPPacket.lldp_parse(msg.data)
-        except LLDPPacket.LLDPUnknownFormat:
-            # This handler can receive all the packets which can be
+        except LLDPPacket.LLDPUnknownFormat as e:
+            # This handler can receive all the packtes which can be
             # not-LLDP packet. Ignore it silently
             return
 
@@ -786,6 +713,13 @@ class Switches(app_manager.RyuApp):
             LOG.error('cannot accept LLDP. unsupported version. %x',
                       msg.datapath.ofproto.OFP_VERSION)
 
+        # get the lldp delay
+        for port in self.ports.keys():
+            if src_dpid == port.dpid and src_port_no == port.port_no:
+                send_timestamp = self.ports[port].timestamp
+                if send_timestamp:
+                    self.ports[port].delay = recv_timestamp - send_timestamp
+
         src = self._get_port(src_dpid, src_port_no)
         if not src or src.dpid == dst_dpid:
             return
@@ -795,7 +729,7 @@ class Switches(app_manager.RyuApp):
             # There are races between EventOFPPacketIn and
             # EventDPPortAdd. So packet-in event can happend before
             # port add event. In that case key error can happend.
-            # LOG.debug('lldp_received error', exc_info=True)
+            # LOG.debug('lldp_received: KeyError %s', e)
             pass
 
         dst = self._get_port(dst_dpid, dst_port_no)
@@ -809,21 +743,11 @@ class Switches(app_manager.RyuApp):
         # LOG.debug("  old_peer=%s", old_peer)
         if old_peer and old_peer != dst:
             old_link = Link(src, old_peer)
-            del self.links[old_link]
             self.send_event_to_observers(event.EventLinkDelete(old_link))
 
         link = Link(src, dst)
         if link not in self.links:
             self.send_event_to_observers(event.EventLinkAdd(link))
-
-            # remove hosts if it's not attached to edge port
-            host_to_del = []
-            for host in self.hosts.values():
-                if not self._is_edge_port(host.port):
-                    host_to_del.append(host.mac)
-
-            for host_mac in host_to_del:
-                del self.hosts[host_mac]
 
         if not self.links.update_link(src, dst):
             # reverse link is not detected yet.
@@ -833,63 +757,12 @@ class Switches(app_manager.RyuApp):
         if self.explicit_drop:
             self._drop_packet(msg)
 
-    @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
-    def host_discovery_packet_in_handler(self, ev):
-        msg = ev.msg
-        eth, pkt_type, pkt_data = ethernet.ethernet.parser(msg.data)
-
-        # ignore lldp and cfm packets
-        if eth.ethertype in (ETH_TYPE_LLDP, ETH_TYPE_CFM):
-            return
-
-        datapath = msg.datapath
-        dpid = datapath.id
-        port_no = -1
-
-        if msg.datapath.ofproto.OFP_VERSION == ofproto_v1_0.OFP_VERSION:
-            port_no = msg.in_port
-        else:
-            port_no = msg.match['in_port']
-
-        port = self._get_port(dpid, port_no)
-
-        # can't find this port(ex: logic port)
-        if not port:
-            return
-        # ignore switch-to-switch port
-        if not self._is_edge_port(port):
-            return
-
-        host_mac = eth.src
-        host = Host(host_mac, port)
-
-        if host_mac not in self.hosts:
-            self.hosts.add(host)
-            ev = event.EventHostAdd(host)
-            self.send_event_to_observers(ev)
-
-        # arp packet, update ip address
-        if eth.ethertype == ether_types.ETH_TYPE_ARP:
-            arp_pkt, _, _ = pkt_type.parser(pkt_data)
-            self.hosts.update_ip(host, ip_v4=arp_pkt.src_ip)
-
-        # ipv4 packet, update ipv4 address
-        elif eth.ethertype == ether_types.ETH_TYPE_IP:
-            ipv4_pkt, _, _ = pkt_type.parser(pkt_data)
-            self.hosts.update_ip(host, ip_v4=ipv4_pkt.src)
-
-        # ipv6 packet, update ipv6 address
-        elif eth.ethertype == ether_types.ETH_TYPE_IPV6:
-            # TODO: need to handle NDP
-            ipv6_pkt, _, _ = pkt_type.parser(pkt_data)
-            self.hosts.update_ip(host, ip_v6=ipv6_pkt.src)
-
     def send_lldp_packet(self, port):
         try:
             port_data = self.ports.lldp_sent(port)
-        except KeyError:
+        except KeyError as e:
             # ports can be modified during our sleep in self.lldp_loop()
-            # LOG.debug('send_lld error', exc_info=True)
+            # LOG.debug('send_lldp: KeyError %s', e)
             return
         if port_data.is_down:
             return
@@ -989,7 +862,7 @@ class Switches(app_manager.RyuApp):
         switches = []
         if dpid is None:
             # reply all list
-            for dp in self.dps.values():
+            for dp in self.dps.itervalues():
                 switches.append(self._get_switch(dp.id))
         elif dpid in self.dps:
             switches.append(self._get_switch(dpid))
@@ -1007,17 +880,4 @@ class Switches(app_manager.RyuApp):
         else:
             links = [link for link in self.links if link.src.dpid == dpid]
         rep = event.EventLinkReply(req.src, dpid, links)
-        self.reply_to_request(req, rep)
-
-    @set_ev_cls(event.EventHostRequest)
-    def host_request_handler(self, req):
-        dpid = req.dpid
-        hosts = []
-        if dpid is None:
-            for mac in self.hosts:
-                hosts.append(self.hosts[mac])
-        else:
-            hosts = self.hosts.get_by_dpid(dpid)
-
-        rep = event.EventHostReply(req.src, dpid, hosts)
         self.reply_to_request(req, rep)
