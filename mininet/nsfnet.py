@@ -37,13 +37,13 @@ class MyTopo(Topo):
             h.append(self.addHost(('h' + str(i)), cls=Host, ip=('10.0.0.' + str(i)), defaultRoute=None))
 
         info('*** Add links\n')
-        self.addLink(s1, s2, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')  # G
+        self.addLink(s1, s2, cls=TCLink, bw=300, delay='500ms', jitter='50ms')  # G
         self.addLink(s1, s3, cls=TCLink, bw=100)  # Y
         self.addLink(s1, s4, cls=TCLink, bw=200, loss=10)  # B
         self.addLink(s2, s3, cls=TCLink, bw=200, loss=10)
         self.addLink(s2, s8, cls=TCLink, bw=500, loss=20)  # R
-        self.addLink(s3, s6, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
-        self.addLink(s4, s5, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s3, s6, cls=TCLink, bw=300, delay='500ms', jitter='50ms')
+        self.addLink(s4, s5, cls=TCLink, bw=300, delay='500ms', jitter='50ms')
         self.addLink(s4, s9, cls=TCLink, bw=100)
         self.addLink(s5, s6, cls=TCLink, bw=200, loss=10)
         self.addLink(s5, s7, cls=TCLink, bw=100)
@@ -54,8 +54,8 @@ class MyTopo(Topo):
         self.addLink(s9, s10, cls=TCLink, bw=500, loss=20)
         self.addLink(s9, s12, cls=TCLink, bw=200, loss=10)
         self.addLink(s10, s11, cls=TCLink, bw=200, loss=10)
-        self.addLink(s10, s13, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
-        self.addLink(s11, s12, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s10, s13, cls=TCLink, bw=300, delay='500ms', jitter='50ms')
+        self.addLink(s11, s12, cls=TCLink, bw=300, delay='500ms', jitter='50ms')
         self.addLink(s11, s14, cls=TCLink, bw=500, loss=20)
         self.addLink(s12, s13, cls=TCLink, bw=100)
 
