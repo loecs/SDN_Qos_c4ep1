@@ -11,12 +11,11 @@ from mininet.link import TCLink, Intf
 from subprocess import call
 from mininet.topo import Topo
 
-class MyTopo( Topo ):
 
-    def build( self ):
+class MyTopo(Topo):
 
-        
-        info( '*** Add switches\n')
+    def build(self):
+        info('*** Add switches\n')
         s7 = self.addSwitch('s7', cls=OVSKernelSwitch)
         s8 = self.addSwitch('s8', cls=OVSKernelSwitch)
         s12 = self.addSwitch('s12', cls=OVSKernelSwitch)
@@ -31,35 +30,35 @@ class MyTopo( Topo ):
         s6 = self.addSwitch('s6', cls=OVSKernelSwitch)
         s13 = self.addSwitch('s13', cls=OVSKernelSwitch)
         s14 = self.addSwitch('s14', cls=OVSKernelSwitch)
- 
 
-        info( '*** Add hosts\n')
-        h=[]
-        for i in range(1,15):
-            h.append(self.addHost(('h'+str(i)), cls=Host, ip=('10.0.0.'+str(i)), defaultRoute=None))
+        info('*** Add hosts\n')
+        h = []
+        for i in range(1, 15):
+            h.append(self.addHost(('h' + str(i)), cls=Host, ip=('10.0.0.' + str(i)), defaultRoute=None))
 
-        info( '*** Add links\n')
-        self.addLink(s2, s1,cls=TCLink,bw=100)
-        self.addLink(s1, s3,cls=TCLink,bw=100,delay='2s')
-        self.addLink(s3, s2,cls=TCLink,bw=100)
-        self.addLink(s1, s4,cls=TCLink,bw=100)
-        self.addLink(s4, s5,cls=TCLink,bw=100,delay='10ms', jitter='500ms')
-        self.addLink(s5, s6,cls=TCLink,bw=100)
-        self.addLink(s6, s3,cls=TCLink,bw=100)
-        self.addLink(s5, s7,cls=TCLink,bw=100)
-        self.addLink(s7, s8,cls=TCLink,bw=100)
-        self.addLink(s2, s8,cls=TCLink,bw=100,loss=60)
-        self.addLink(s9, s4,cls=TCLink,bw=100)
-        self.addLink(s9, s10,cls=TCLink,bw=100)
-        self.addLink(s8, s11,cls=TCLink,bw=100)
-        self.addLink(s11, s10,cls=TCLink,bw=100)
-        self.addLink(s9, s12,cls=TCLink,bw=100)
-        self.addLink(s12, s11,cls=TCLink,bw=100)
-        self.addLink(s6, s14,cls=TCLink,bw=100)
-        self.addLink(s14, s11,cls=TCLink,bw=100)
-        self.addLink(s12, s13,cls=TCLink,bw=100)
-        self.addLink(s13, s10,cls=TCLink,bw=100)
-        self.addLink(s13, s6,cls=TCLink,bw=100)
+        info('*** Add links\n')
+        self.addLink(s1, s2, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')  # G
+        self.addLink(s1, s3, cls=TCLink, bw=100)  # Y
+        self.addLink(s1, s4, cls=TCLink, bw=200, loss=10)  # B
+        self.addLink(s2, s3, cls=TCLink, bw=200, loss=10)
+        self.addLink(s2, s8, cls=TCLink, bw=500, loss=20)  # R
+        self.addLink(s3, s6, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s4, s5, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s4, s9, cls=TCLink, bw=100)
+        self.addLink(s5, s6, cls=TCLink, bw=200, loss=10)
+        self.addLink(s5, s7, cls=TCLink, bw=100)
+        self.addLink(s6, s13, cls=TCLink, bw=500, loss=20)
+        self.addLink(s6, s14, cls=TCLink, bw=100)
+        self.addLink(s7, s8, cls=TCLink, bw=200, loss=10)
+        self.addLink(s8, s11, cls=TCLink, bw=100)
+        self.addLink(s9, s10, cls=TCLink, bw=500, loss=20)
+        self.addLink(s9, s12, cls=TCLink, bw=200, loss=10)
+        self.addLink(s10, s11, cls=TCLink, bw=200, loss=10)
+        self.addLink(s10, s13, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s11, s12, cls=TCLink, bw=500, delay='1000ms', jitter='50ms')
+        self.addLink(s11, s14, cls=TCLink, bw=500, loss=20)
+        self.addLink(s12, s13, cls=TCLink, bw=100)
+
         self.addLink(s1, h[0])
         self.addLink(s2, h[1])
         self.addLink(s3, h[2])
@@ -74,9 +73,6 @@ class MyTopo( Topo ):
         self.addLink(s12, h[11])
         self.addLink(s13, h[12])
         self.addLink(s14, h[13])
-        
-  
-       
 
-topos = { 'mytopo': ( lambda: MyTopo() ) }
 
+topos = {'mytopo': (lambda: MyTopo())}
