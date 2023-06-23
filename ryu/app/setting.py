@@ -43,7 +43,7 @@ OPERATE_BW_MEASURE ={'A':0.25,'B':1,'c':6}
 
 DOWNLOAD_BW_MEASURE ={'A':0.05,'B':1,'c':12}
 
-SESSION_DELAY_MEASURE ={'y1':0.067,'B':0.04,'y2':0.016,'b1':-25,'b2':205,'b3':65,'c1':150,'c2':300,'delta':90}
+SESSION_DELAY_MEASURE ={'y1':0.067,'B':0.04,'y2':0.016,'b1':-25,'b2':205,'b3':65,'c1':150,'c2':1000,'delta':90}
 
 STREAMING_DELAY_MEASURE ={'y1':0.004,'B':0.005,'y2':0.006,'b1':-25,'b2':625,'b3':75,'c1':200,'c2':1000,'delta':17.506}
 
