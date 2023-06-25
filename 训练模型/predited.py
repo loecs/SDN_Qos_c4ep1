@@ -22,7 +22,7 @@ db = pymysql.connect(
 cour = db.cursor()
 for i in range(len(a)):
     sql_str = "insert into predicted(throughput,delay,jitter,loss) values (%s,%s,%s,%s)"
-    cour.execute(sql_str,(a[i]/600,b[i],c[i],d[i]))
+    cour.execute(sql_str,(a[i],b[i],c[i],d[i]))
     db.commit()
 
 cour.close()
